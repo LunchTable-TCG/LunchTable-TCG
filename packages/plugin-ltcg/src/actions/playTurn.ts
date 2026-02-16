@@ -50,7 +50,7 @@ export const playTurnAction: Action = {
     }
 
     try {
-      let view = await client.getView(matchId);
+      let view = await client.getView(matchId, "host");
 
       if (view.gameOver) {
         client.setMatch(null);
@@ -68,7 +68,7 @@ export const playTurnAction: Action = {
       const actions = await playOneTurn(matchId, view);
 
       // Check game over after turn
-      view = await client.getView(matchId);
+      view = await client.getView(matchId, "host");
       if (view.gameOver) {
         client.setMatch(null);
         actions.push(gameOverSummary(view));

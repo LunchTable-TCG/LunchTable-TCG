@@ -464,10 +464,47 @@ export const joinMatch = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await match.joinMatch(ctx, {
-      matchId: args.matchId,
+    const db = ctx.db as any;
+    const matchDoc = await db.get(args.matchId);
+    if (!matchDoc) {
+      throw new Error(`Match ${args.matchId} not found`);
+    }
+
+    if ((matchDoc as any).status !== "waiting") {
+      throw new Error(`Match ${args.matchId} is not accepting players`);
+    }
+
+    const hostId = (matchDoc as any).hostId ?? "";
+    const hostDeck = (matchDoc as any).hostDeck;
+
+    if (!Array.isArray(hostDeck) || !hostDeck.length) {
+      throw new Error("Match host deck is missing");
+    }
+
+    if (!Array.isArray(args.awayDeck) || args.awayDeck.length < 30) {
+      throw new Error("Away deck must contain at least 30 cards");
+    }
+
+    await db.patch(args.matchId, {
       awayId: args.awayId,
       awayDeck: args.awayDeck,
+    });
+
+    const allCards = await cards.cards.getAllCards(ctx);
+    const cardLookup = buildCardLookup(allCards as any);
+    const initialState = createInitialState(
+      cardLookup,
+      DEFAULT_CONFIG,
+      hostId,
+      args.awayId,
+      hostDeck,
+      args.awayDeck,
+      "host",
+    );
+
+    await match.startMatch(ctx, {
+      matchId: args.matchId,
+      initialState: JSON.stringify(initialState),
     });
     return null;
   },
@@ -744,7 +781,13 @@ export const getActiveMatchByHost = query({
 export const getOpenLobbyByHost = query({
   args: { hostId: v.string() },
   handler: async (ctx, args) => {
-    return await match.getOpenLobbyByHost(ctx, args);
+    const db = (ctx as any).db as any;
+    return await db
+      .query("matches")
+      .withIndex("by_host", (q: any) => q.eq("hostId", args.hostId))
+      .filter((q: any) => q.eq(q.field("status"), "waiting"))
+      .order("desc")
+      .first();
   },
 });
 

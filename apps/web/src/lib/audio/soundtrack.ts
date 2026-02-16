@@ -1,3 +1,5 @@
+import { blob as blobUrl } from "@/lib/blobUrls";
+
 export interface SoundtrackManifest {
   playlists: Record<string, string[]>;
   sfx: Record<string, string>;
@@ -13,7 +15,16 @@ export interface ResolvedPlaylist {
   shuffle: boolean;
 }
 
+interface CachedManifestEntry {
+  source: string;
+  manifest: SoundtrackManifest;
+  cachedAt: number;
+  normalized: boolean;
+}
+
 const COMMENT_PREFIXES = ["#", ";", "//"];
+const SOUNDTRACK_CACHE_KEY = "ltcg.soundtrack.manifest.cache.v2";
+const SOUNDTRACK_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function normalizeSectionName(value: string): string {
   return value.trim().toLowerCase();
@@ -38,6 +49,141 @@ function extractValue(line: string): string {
 function pushUnique(target: string[], value: string): void {
   if (!value || target.includes(value)) return;
   target.push(value);
+}
+
+function normalizeTrackPath(reference: string): string {
+  const trimmed = reference.trim();
+  if (!trimmed) return "";
+
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith(".") || trimmed.startsWith("/")) return trimmed;
+  return `/${trimmed}`;
+}
+
+function isLunchtableTrack(reference: string): boolean {
+  const lower = reference.toLowerCase();
+  return lower.startsWith("/lunchtable/");
+}
+
+function encodeBlobSegment(segment: string): string {
+  try {
+    return encodeURIComponent(decodeURIComponent(segment));
+  } catch {
+    return encodeURIComponent(segment);
+  }
+}
+
+function toBlobUrl(reference: string): string {
+  const normalized = reference.startsWith("/") ? reference.slice(1) : reference;
+  const cleanPath = normalized.replace(/^lunchtable\/+/, "");
+  const encodedPath = cleanPath
+    .split("/")
+    .map((segment) => encodeBlobSegment(segment))
+    .join("/");
+
+  return blobUrl(encodedPath);
+}
+
+function resolveTrackUrl(reference: string): string {
+  const normalized = normalizeTrackPath(reference);
+
+  if (isLunchtableTrack(normalized)) {
+    return toBlobUrl(normalized);
+  }
+
+  return resolveTrackUrlFromOrigin(normalized);
+}
+
+function resolveTrackUrlFromOrigin(reference: string): string {
+  if (typeof window === "undefined") return reference;
+  try {
+    return new URL(reference, window.location.origin).toString();
+  } catch {
+    return reference;
+  }
+}
+
+function uniqueOrdered(values: string[]): string[] {
+  const out: string[] = [];
+  for (const value of values) {
+    if (!out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
+function normalizeTrackList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const tracks: string[] = [];
+  for (const track of values) {
+    if (typeof track !== "string") continue;
+    const normalized = normalizeTrackPath(track);
+    if (!normalized) continue;
+    pushUnique(tracks, normalized);
+  }
+
+  return tracks;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isSoundtrackManifest(value: unknown): value is SoundtrackManifest {
+  if (!isObject(value)) return false;
+  if (!isObject(value.playlists) || !isObject(value.sfx)) return false;
+  if (typeof value.source !== "string" || typeof value.loadedAt !== "number") return false;
+
+  for (const tracks of Object.values(value.playlists)) {
+    if (!Array.isArray(tracks)) return false;
+  }
+
+  return true;
+}
+
+function normalizeSfxMap(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (value == null || typeof value !== "object") return out;
+
+  for (const [key, track] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof track !== "string") continue;
+    const normalizedKey = key.trim().toLowerCase();
+    const normalizedTrack = normalizeTrackPath(track);
+    if (!normalizedKey || !normalizedTrack) continue;
+    out[normalizedKey] = normalizedTrack;
+  }
+
+  return out;
+}
+
+function parseTrackPayload(raw: string): SoundtrackManifest {
+  const trimmed = raw.trim();
+
+  try {
+    const json = JSON.parse(trimmed) as {
+      playlists?: Record<string, unknown>;
+      sfx?: Record<string, unknown>;
+      source?: string;
+    };
+
+    if (json && typeof json === "object") {
+      return {
+        playlists: Object.fromEntries(
+          Object.entries(json.playlists ?? {}).map(([section, tracks]) => [
+            normalizeSectionName(section),
+            normalizeTrackList(tracks),
+          ]),
+        ),
+        sfx: normalizeSfxMap(json.sfx ?? {}),
+        source: json.source ?? "/api/soundtrack",
+        loadedAt: Date.now(),
+      };
+    }
+  } catch {
+    // fall through to .in parser
+  }
+
+  return parseSoundtrackIn(trimmed, "/soundtrack.in");
 }
 
 export function parseSoundtrackIn(
@@ -70,13 +216,13 @@ export function parseSoundtrackIn(
       const key = line.slice(0, separatorIndex).trim().toLowerCase();
       const value = line.slice(separatorIndex + 1).trim();
       if (!key || !value) continue;
-      sfx[key] = value;
+      sfx[key] = normalizeTrackPath(value);
       continue;
     }
 
     const playlistKey = section || "default";
     if (!playlists[playlistKey]) playlists[playlistKey] = [];
-    pushUnique(playlists[playlistKey], extractValue(line));
+    pushUnique(playlists[playlistKey], normalizeTrackPath(extractValue(line)));
   }
 
   return {
@@ -87,23 +233,138 @@ export function parseSoundtrackIn(
   };
 }
 
-export async function loadSoundtrackManifest(
-  source = "/soundtrack.in",
-): Promise<SoundtrackManifest> {
-  const response = await fetch(source, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load ${source} (${response.status})`);
+function readCachedManifest(source: string): CachedManifestEntry | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(SOUNDTRACK_CACHE_KEY);
+    if (!raw) return null;
+
+    const rawData = JSON.parse(raw);
+    if (!isObject(rawData)) return null;
+    if (
+      typeof rawData.source !== "string" ||
+      rawData.source !== source ||
+      typeof rawData.cachedAt !== "number" ||
+      typeof rawData.normalized !== "boolean" ||
+      !isSoundtrackManifest(rawData.manifest)
+    ) {
+      return null;
+    }
+
+    return rawData as unknown as CachedManifestEntry;
+  } catch (error) {
+    console.warn("Failed to parse cached soundtrack manifest", error);
+    return null;
   }
-  const text = await response.text();
-  return parseSoundtrackIn(text, source);
 }
 
-function uniqueOrdered(values: string[]): string[] {
-  const out: string[] = [];
-  for (const value of values) {
-    if (!out.includes(value)) out.push(value);
+function isManifestCacheFresh(entry: CachedManifestEntry | null): boolean {
+  if (!entry) return false;
+  return Date.now() - entry.cachedAt <= SOUNDTRACK_CACHE_TTL_MS;
+}
+
+function writeCachedManifest(
+  source: string,
+  manifest: SoundtrackManifest,
+  normalized = false,
+): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    const payload: CachedManifestEntry = {
+      source,
+      manifest,
+      cachedAt: Date.now(),
+      normalized,
+    };
+    window.localStorage.setItem(SOUNDTRACK_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore cache write failures
   }
-  return out;
+}
+
+function normalizeManifestForPlayback(manifest: SoundtrackManifest): SoundtrackManifest {
+  return {
+    source: manifest.source,
+    loadedAt: manifest.loadedAt,
+    playlists: Object.fromEntries(
+      Object.entries(manifest.playlists).map(([section, tracks]) => [
+        section,
+        tracks
+          .map((track) => resolveTrackUrl(track))
+          .filter((track) => track.length > 0),
+      ]),
+    ),
+    sfx: Object.fromEntries(
+      Object.entries(manifest.sfx).map(([key, track]) => [
+        key,
+        resolveTrackUrl(track),
+      ]),
+    ),
+  };
+}
+
+export async function loadSoundtrackManifest(
+  source = "/api/soundtrack",
+): Promise<SoundtrackManifest> {
+  const loadFromUrl = async (
+    requestSource: string,
+    cacheMode: RequestCache = "no-store",
+  ): Promise<SoundtrackManifest> => {
+    const response = await fetch(requestSource, {
+      cache: cacheMode,
+      headers: { Accept: "application/json, text/plain;q=0.9" },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to load ${requestSource} (${response.status})`);
+    }
+
+    const text = await response.text();
+    const parsed = parseTrackPayload(text);
+    parsed.source = requestSource;
+    parsed.loadedAt = Date.now();
+
+    const normalized = normalizeManifestForPlayback(parsed);
+    writeCachedManifest(requestSource, normalized, true);
+    return normalized;
+  };
+
+  const cached = readCachedManifest(source);
+  const cachedManifest = cached
+    ? cached.normalized
+      ? cached.manifest
+      : normalizeManifestForPlayback(cached.manifest)
+    : null;
+  if (cachedManifest && isManifestCacheFresh(cached)) {
+    return cachedManifest;
+  }
+
+  if (cachedManifest) {
+    try {
+      return await loadFromUrl(source, "no-store");
+    } catch {
+      return cachedManifest;
+    }
+  }
+
+  try {
+    return await loadFromUrl(source);
+  } catch (error) {
+    console.error("Failed to load soundtrack manifest", { source, error });
+    if (cached) return normalizeManifestForPlayback(cached.manifest);
+
+    if (source !== "/soundtrack.in") {
+      try {
+        return await loadFromUrl("/soundtrack.in");
+      } catch {
+        // fall through
+      }
+    }
+
+    throw error instanceof Error ? error : new Error("Failed to load soundtrack manifest");
+  }
 }
 
 export function resolvePlaylist(
@@ -140,10 +401,5 @@ export function resolvePlaylist(
 }
 
 export function toAbsoluteTrackUrl(reference: string): string {
-  if (typeof window === "undefined") return reference;
-  try {
-    return new URL(reference, window.location.origin).toString();
-  } catch {
-    return reference;
-  }
+  return resolveTrackUrl(reference);
 }

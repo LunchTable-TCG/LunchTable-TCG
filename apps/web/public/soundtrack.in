@@ -29,11 +29,11 @@
 # /audio/default/main-01.mp3
 
 [sfx]
-# summon=/audio/sfx/summon.wav
-# spell=/audio/sfx/spell.wav
-# attack=/audio/sfx/attack.wav
-# turn=/audio/sfx/turn.wav
-# victory=/audio/sfx/victory.wav
-# defeat=/audio/sfx/defeat.wav
-# draw=/audio/sfx/draw.wav
-# error=/audio/sfx/error.wav
+summon=/lunchtable/soundtrack/MISC1.mp3
+spell=/lunchtable/soundtrack/GEEK.mp3
+attack=/lunchtable/soundtrack/GOODIE.mp3
+turn=/lunchtable/soundtrack/THEME2.mp3
+victory=/lunchtable/soundtrack/THEMEREMIX.mp3
+defeat=/lunchtable/soundtrack/FREAK.mp3
+draw=/lunchtable/soundtrack/DROPOUT.mp3
+error=/lunchtable/soundtrack/MISC2.mp3

@@ -13,6 +13,7 @@
 
 import { getClient } from "../client.js";
 import { playOneTurn } from "./turnLogic.js";
+import { resolveLifePoints } from "../shared/gameView.js";
 import type {
   Action,
   HandlerCallback,
@@ -64,27 +65,16 @@ export const playStoryAction: Action = {
     const log: string[] = [];
 
     try {
-      // ── 1. Ensure agent has a deck ───────────────────────────
-      try {
-        const decks = await client.getStarterDecks();
-        if (decks.length > 0) {
-          const deck = decks[Math.floor(Math.random() * decks.length)];
-          await client.selectDeck(deck.deckCode);
-        }
-      } catch {
-        // Already has deck
-      }
-
-      // ── 2. Find next stage ───────────────────────────────────
+      // ── 1. Find next stage ───────────────────────────────────
       const progress = await client.getStoryProgress();
-      const chapters = progress.chapters;
+      const chapters = progress.chapters ?? [];
 
-      if (!chapters.length) {
+      if (!Array.isArray(chapters) || !chapters.length) {
         throw new Error("No story chapters available. Run seed first.");
       }
 
       const completedStages = new Set(
-        progress.stageProgress
+        (progress.stageProgress ?? [])
           .filter((s) => s.starsEarned > 0)
           .map((s) => `${s.chapterId}:${s.stageNumber}`),
       );
@@ -103,7 +93,7 @@ export const playStoryAction: Action = {
         }
       }
 
-      // ── 3. Get stage narrative ───────────────────────────────
+      // ── 2. Get stage narrative ───────────────────────────────
       let stageData: StageData | null = null;
       try {
         stageData = await client.getStage(targetChapterId, targetStageNumber);
@@ -132,7 +122,7 @@ export const playStoryAction: Action = {
         });
       }
 
-      // ── 4. Start battle ──────────────────────────────────────
+      // ── 3. Start battle ──────────────────────────────────────
       const result = await client.startBattle(
         targetChapterId,
         targetStageNumber,
@@ -141,11 +131,11 @@ export const playStoryAction: Action = {
       client.setMatch(matchId);
       log.push(`Match started: ${matchId}`);
 
-      // ── 5. Game loop — play until game over ──────────────────
+      // ── 4. Game loop — play until game over ──────────────────
       let turnCount = 0;
 
       for (let i = 0; i < MAX_TURNS; i++) {
-        const view = await client.getView(matchId);
+        const view = await client.getView(matchId, "host");
 
         if (view.gameOver) break;
 
@@ -159,17 +149,16 @@ export const playStoryAction: Action = {
         for (const a of turnActions) log.push(a);
       }
 
-      // ── 6. Check outcome ─────────────────────────────────────
-      const finalView = await client.getView(matchId);
-      const myLP = finalView.players.host.lifePoints;
-      const oppLP = finalView.players.away.lifePoints;
+      // ── 5. Check outcome ─────────────────────────────────────
+      const finalView = await client.getView(matchId, "host");
+      const { myLP, oppLP } = resolveLifePoints(finalView);
       const won = myLP > oppLP;
 
       log.push(
         `Match ended after ${turnCount} turns — ${won ? "VICTORY" : "DEFEAT"} (LP: ${myLP} vs ${oppLP})`,
       );
 
-      // ── 7. Complete stage ────────────────────────────────────
+      // ── 6. Complete stage ────────────────────────────────────
       try {
         const completion = await client.completeStage(matchId);
         log.push(`Stage complete! ${completion.starsEarned} stars earned.`);
@@ -217,7 +206,16 @@ export const playStoryAction: Action = {
     } catch (err) {
       client.setMatch(null);
       const msg = err instanceof Error ? err.message : String(err);
-      if (callback) await callback({ text: `Story mode failed: ${msg}` });
+      const normalized = msg.toLowerCase();
+      const isDeckMissingError =
+        normalized.includes("deck") &&
+        (normalized.includes("active") ||
+          normalized.includes("missing") ||
+          normalized.includes("select"));
+      const text = isDeckMissingError
+        ? "No active deck selected. Please choose a starter deck before starting the battle."
+        : `Story mode failed: ${msg}`;
+      if (callback) await callback({ text });
       return { success: false, error: msg };
     }
   },

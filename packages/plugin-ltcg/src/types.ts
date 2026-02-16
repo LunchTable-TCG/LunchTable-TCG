@@ -174,8 +174,8 @@ export interface StarterDeck {
 }
 
 /** Card in the player's hand (from PlayerView.hand) */
-export interface CardInHand {
-  instanceId: string;
+export interface CardInHandRecord {
+  instanceId?: string;
   cardId?: string;
   cardType: "stereotype" | "spell" | "trap";
   name: string;
@@ -185,20 +185,27 @@ export interface CardInHand {
   description?: string;
 }
 
+export type CardInHand = CardInHandRecord | string;
+
 /** Card on the game field */
 export interface BoardCard {
-  instanceId: string;
+  instanceId?: string;
+  cardId?: string;
+  definitionId?: string;
   name: string;
   attack: number;
   defense: number;
   position?: "attack" | "defense";
   faceDown?: boolean;
+  canAttack?: boolean;
+  hasAttackedThisTurn?: boolean;
+  turnSummoned?: number;
 }
 
 /** GET /api/agent/game/view */
 export interface PlayerView {
   gameOver: boolean;
-  phase:
+  phase?:
     | "draw"
     | "standby"
     | "main"
@@ -206,7 +213,16 @@ export interface PlayerView {
     | "main2"
     | "breakdown_check"
     | "end";
+  currentPhase?: string;
   currentTurnPlayer: "host" | "away";
+  mySeat?: "host" | "away";
+  turnNumber?: number;
+  currentChain?: unknown[];
+  lifePoints?: number;
+  opponentLifePoints?: number;
+  board?: (BoardCard | null)[];
+  opponentBoard?: (BoardCard | null)[];
+  spellTrapZone?: (BoardCard | null)[];
   players: {
     host: { lifePoints: number };
     away: { lifePoints: number };
@@ -288,22 +304,23 @@ export interface StageCompletionResult {
 
 /** Commands sent via POST /api/agent/game/action */
 export type GameCommand =
-  | { type: "SUMMON"; cardInstanceId: string; position: "attack" | "defense" }
-  | { type: "SET_MONSTER"; cardInstanceId: string }
-  | { type: "ACTIVATE_SPELL"; cardInstanceId: string }
-  | { type: "ACTIVATE_TRAP"; cardInstanceId: string }
+  | { type: "SUMMON"; cardId: string; position: "attack" | "defense"; tributeCardIds?: string[] }
+  | { type: "SET_MONSTER"; cardId: string }
+  | { type: "ACTIVATE_SPELL"; cardId: string; targets?: string[] }
+  | { type: "ACTIVATE_TRAP"; cardId: string; targets?: string[] }
+  | { type: "SET_SPELL_TRAP"; cardId: string }
   | {
       type: "DECLARE_ATTACK";
-      attackerInstanceId: string;
-      targetInstanceId?: string;
+      attackerId: string;
+      targetId?: string;
     }
   | { type: "ADVANCE_PHASE" }
   | { type: "END_TURN" }
   | {
       type: "CHANGE_POSITION";
-      cardInstanceId: string;
+      cardId: string;
       newPosition: string;
     }
-  | { type: "FLIP_SUMMON"; cardInstanceId: string }
-  | { type: "CHAIN_RESPONSE"; responseType: string }
+  | { type: "FLIP_SUMMON"; cardId: string }
+  | { type: "CHAIN_RESPONSE"; pass?: boolean; cardId?: string; responseType?: string }
   | { type: "SURRENDER" };

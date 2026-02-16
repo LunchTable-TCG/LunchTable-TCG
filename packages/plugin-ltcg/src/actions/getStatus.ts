@@ -6,6 +6,7 @@
  */
 
 import { getClient } from "../client.js";
+import { resolveLifePoints, resolvePhase } from "../shared/gameView.js";
 import type {
   Action,
   BoardCard,
@@ -52,12 +53,12 @@ export const getStatusAction: Action = {
     }
 
     try {
-      const view = await client.getView(matchId);
+      const view = await client.getView(matchId, "host");
+      const phase = resolvePhase(view);
+      const { myLP, oppLP } = resolveLifePoints(view);
 
       if (view.gameOver) {
         client.setMatch(null);
-        const myLP = view.players.host.lifePoints;
-        const oppLP = view.players.away.lifePoints;
         const outcome =
           myLP > oppLP
             ? "Victory!"
@@ -79,15 +80,15 @@ export const getStatusAction: Action = {
 
       const text = [
         `Match: ${matchId}`,
-        `Phase: ${view.phase} — ${isMyTurn ? "Your turn" : "Opponent's turn"}`,
-        `LP: You ${view.players.host.lifePoints} / Opponent ${view.players.away.lifePoints}`,
+        `Phase: ${phase} — ${isMyTurn ? "Your turn" : "Opponent's turn"}`,
+        `LP: You ${myLP} / Opponent ${oppLP}`,
         `Hand: ${view.hand?.length ?? 0} cards | Field: ${myMonsters.length} vs ${oppMonsters.length} monsters`,
       ].join("\n");
 
       if (callback) await callback({ text, action: "CHECK_LTCG_STATUS" });
       return {
         success: true,
-        data: { matchId, phase: view.phase, isMyTurn },
+        data: { matchId, phase, isMyTurn },
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

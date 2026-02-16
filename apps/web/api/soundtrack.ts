@@ -89,10 +89,14 @@ function resolveContext(playlists: Record<string, string[]>, context: string) {
   };
 }
 
-function setCorsHeaders(response: VercelResponse) {
-  response.setHeader("Access-Control-Allow-Origin", "*");
+function setCorsHeaders(request: VercelRequest, response: VercelResponse) {
+  const origin = request.headers.origin;
+  const allowedOrigin = typeof origin === "string" && origin.length > 0 ? origin : "*";
+
+  response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Vary", "Origin");
 }
 
 async function readManifestFile(): Promise<string> {
@@ -113,7 +117,7 @@ async function readManifestFile(): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  setCorsHeaders(res);
+  setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
     res.status(204).end();

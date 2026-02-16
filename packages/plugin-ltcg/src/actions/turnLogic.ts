@@ -13,18 +13,20 @@ import type {
   BoardCard,
   CardInHand,
   GameCommand,
-  MatchActive,
   PlayerView,
 } from "../types.js";
+import { resolveLifePoints, resolvePhase } from "../shared/gameView.js";
 import {
   MAX_CHAIN_RESPONSE_ATTEMPTS,
   MAX_MONSTER_ZONE_SIZE,
-} from "../../../shared/turnConstants";
+} from "../shared/turnConstants.js";
+
+type Seat = "host" | "away";
 
 type BoardCardLike = BoardCard & { cardId?: string; instanceId?: string };
 
 interface TurnSnapshot {
-  phase: PlayerView["phase"];
+  phase: string;
   turnPlayer: "host" | "away";
   myLife: number;
   oppLife: number;
@@ -43,11 +45,13 @@ interface TurnSnapshot {
 export async function playOneTurn(
   matchId: string,
   view: PlayerView,
-  seat: MatchActive["seat"] = "host",
+  seat: Seat = "host",
 ): Promise<string[]> {
   const client = getClient();
   const currentView = { value: view };
   const actions: string[] = [];
+
+  const getPhase = (): string => resolvePhase(currentView.value);
 
   const refreshView = async (): Promise<PlayerView> => {
     const next = await client.getView(matchId, seat);
@@ -110,7 +114,7 @@ export async function playOneTurn(
   };
 
   const advancePhase = async (): Promise<boolean> => {
-    const from = currentView.value.phase;
+    const from = getPhase();
     const ok = await submitAction(
       { type: "ADVANCE_PHASE" },
       `Advanced phase from ${from}`,
@@ -234,55 +238,64 @@ export async function playOneTurn(
   const combat = async () => {
     while (
       isMyTurnAndAlive() &&
-      currentView.value.phase === "combat"
+      getPhase() === "combat"
     ) {
-      const attacker = getBoard(currentView.value)
+      const attackers = getBoard(currentView.value)
         .filter((card) => !card.faceDown)
         .filter((card) => card.canAttack !== false)
-        .filter((card) => !card.hasAttackedThisTurn)[0];
+        .filter((card) => !card.hasAttackedThisTurn);
 
-      if (!attacker) break;
+      if (attackers.length === 0) {
+        break;
+      }
 
-      const attackerId = attacker.cardId ?? attacker.instanceId;
-      if (!attackerId) break;
+      let madeProgress = false;
 
-      const opponentBoard = getOpponentBoard(currentView.value);
-      const possibleTargets =
-        opponentBoard.length > 0
-          ? opponentBoard
-              .map((card) => card.cardId ?? card.instanceId)
-              .filter(Boolean)
-          : [undefined];
+      for (const attacker of attackers) {
+        const attackerId = attacker.cardId ?? attacker.instanceId;
+        if (!attackerId) continue;
 
-      let attacked = false;
-      for (const targetId of possibleTargets) {
-        const didAttack = await submitAction(
-          {
-            type: "DECLARE_ATTACK",
-            attackerId,
-            ...(targetId ? { targetId } : {}),
-          },
-          targetId
-            ? `Monster ${attackerId} attacked ${targetId}`
-            : `Monster ${attackerId} attacked directly`,
-        );
-        if (didAttack) {
-          attacked = true;
+        const opponentBoard = getOpponentBoard(currentView.value);
+        const possibleTargets =
+          opponentBoard.length > 0
+            ? opponentBoard
+                .map((card) => card.cardId ?? card.instanceId)
+                .filter(Boolean)
+            : [undefined];
+
+        let attacked = false;
+        for (const targetId of possibleTargets) {
+          const didAttack = await submitAction(
+            {
+              type: "DECLARE_ATTACK",
+              attackerId,
+              ...(targetId ? { targetId } : {}),
+            },
+            targetId
+              ? `Monster ${attackerId} attacked ${targetId}`
+              : `Monster ${attackerId} attacked directly`,
+          );
+          if (didAttack) {
+            attacked = true;
+            madeProgress = true;
+            break;
+          }
+        }
+
+        if (!attacked) continue;
+
+        await clearChain();
+        if (currentView.value.gameOver) break;
+        const afterAttack = await refreshView();
+        if (
+          afterAttack.currentTurnPlayer !== seat ||
+          resolvePhase(afterAttack) !== "combat"
+        ) {
           break;
         }
       }
 
-      if (!attacked) {
-        break;
-      }
-
-      await clearChain();
-      if (currentView.value.gameOver) break;
-      const afterAttack = await refreshView();
-      if (
-        afterAttack.currentTurnPlayer !== seat ||
-        afterAttack.phase !== "combat"
-      ) {
+      if (!madeProgress) {
         break;
       }
     }
@@ -298,7 +311,7 @@ export async function playOneTurn(
   // Ensure we're in a playable phase.
   while (
     isMyTurnAndAlive() &&
-    !["main", "main2", "combat", "end"].includes(currentView.value.phase)
+    !["main", "main2", "combat", "end"].includes(getPhase())
   ) {
     const moved = await advancePhase();
     if (!moved) break;
@@ -306,7 +319,7 @@ export async function playOneTurn(
   }
 
   // ── Main phase: summon + spells/traps ─────────────────────────
-  if (currentView.value.phase === "main" || currentView.value.phase === "main2") {
+  if (getPhase() === "main" || getPhase() === "main2") {
     const handIds = getHandIds(currentView.value);
 
     await summonFromHand(handIds);
@@ -327,10 +340,10 @@ export async function playOneTurn(
   }
 
   // ── Enter combat phase ───────────────────────────────────────
-    while (
+  while (
     isMyTurnAndAlive() &&
-    currentView.value.phase !== "combat" &&
-    currentView.value.phase !== "end"
+    getPhase() !== "combat" &&
+    getPhase() !== "end"
   ) {
     const moved = await advancePhase();
     if (!moved) break;
@@ -341,7 +354,7 @@ export async function playOneTurn(
   await refreshView();
 
   // ── Combat phase: attack with all legal monsters ─────────────
-  if (currentView.value.phase === "combat") {
+  if (getPhase() === "combat") {
     await combat();
   }
 
@@ -352,23 +365,24 @@ export async function playOneTurn(
 
   // ── Resolve phase end / end-turn window.
   if (isMyTurnAndAlive()) {
-    if (currentView.value.phase === "combat") {
+    if (getPhase() === "combat") {
       await clearChain();
       await advancePhase();
       await clearChain();
     }
 
     await refreshView();
-      if (isMyTurnAndAlive()) {
-        if (currentView.value.phase !== "end") {
-          await advancePhase();
-        }
-        await clearChain();
-        await refreshView();
-        if (isMyTurnAndAlive()) {
-          await endTurn();
-        }
-      }
+    while (isMyTurnAndAlive() && getPhase() !== "end") {
+      const moved = await advancePhase();
+      if (!moved) break;
+      await clearChain();
+      await refreshView();
+    }
+
+    if (isMyTurnAndAlive()) {
+      await clearChain();
+      await endTurn();
+    }
   }
 
   return actions;
@@ -377,40 +391,12 @@ export async function playOneTurn(
 /** Format a game-over summary from the final view */
 export function gameOverSummary(
   view: PlayerView,
-  seat: MatchActive["seat"] = "host",
+  seat: Seat = "host",
 ): string {
   const { myLP, oppLP } = resolveLifePoints(view, seat);
   if (myLP > oppLP) return `VICTORY! (You: ${myLP} LP — Opponent: ${oppLP} LP)`;
   if (myLP < oppLP) return `DEFEAT. (You: ${myLP} LP — Opponent: ${oppLP} LP)`;
   return `DRAW. (Both: ${myLP} LP)`;
-}
-
-function resolveLifePoints(
-  view: {
-    lifePoints?: number;
-    opponentLifePoints?: number;
-    players?: {
-      host: { lifePoints: number };
-      away: { lifePoints: number };
-    };
-  },
-  seat: MatchActive["seat"],
-) {
-  if (view.lifePoints !== undefined || view.opponentLifePoints !== undefined) {
-    return seat === "host"
-      ? {
-          myLP: view.lifePoints ?? view.opponentLifePoints ?? 0,
-          oppLP: view.opponentLifePoints ?? view.lifePoints ?? 0,
-        }
-      : {
-          myLP: view.opponentLifePoints ?? view.lifePoints ?? 0,
-          oppLP: view.lifePoints ?? view.opponentLifePoints ?? 0,
-        };
-  }
-
-  const host = view.players?.host?.lifePoints ?? 0;
-  const away = view.players?.away?.lifePoints ?? 0;
-  return seat === "host" ? { myLP: host, oppLP: away } : { myLP: away, oppLP: host };
 }
 
 function dedupe(items: string[]): string[] {
@@ -431,7 +417,7 @@ function boardStateSignature(cards: BoardCardLike[]): string {
     .join(";");
 }
 
-function snapshot(view: PlayerView, seat: MatchActive["seat"]): TurnSnapshot {
+function snapshot(view: PlayerView, seat: Seat): TurnSnapshot {
   const lifePoints = resolveLifePoints(view, seat);
   const board = (view.board?.length
     ? view.board
@@ -443,7 +429,7 @@ function snapshot(view: PlayerView, seat: MatchActive["seat"]): TurnSnapshot {
   ) as Array<BoardCardLike>;
 
   return {
-    phase: view.phase,
+    phase: resolvePhase(view),
     turnPlayer: view.currentTurnPlayer,
     myLife: lifePoints.myLP,
     oppLife: lifePoints.oppLP,

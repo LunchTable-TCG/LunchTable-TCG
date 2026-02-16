@@ -1,8 +1,8 @@
 /**
  * Action: START_LTCG_BATTLE
  *
- * Starts a story mode battle. Auto-selects a starter deck if the agent
- * doesn't have one, picks the first available chapter, and begins the match.
+ * Starts a story mode battle, picks the first available chapter, and begins
+ * the match using the currently selected active deck.
  */
 
 import { getClient } from "../client.js";
@@ -44,25 +44,29 @@ export const startBattleAction: Action = {
     try {
       const me = await client.getMe();
 
-      // Ensure agent has a deck — auto-select if not
-      try {
-        const decks = await client.getStarterDecks();
-        if (decks.length > 0) {
-          const deck = decks[Math.floor(Math.random() * decks.length)];
-          await client.selectDeck(deck.deckCode);
+      const meBag = me as unknown as Record<string, unknown>;
+      const activeDeckCode = (() => {
+        if (typeof meBag.activeDeckCode === "string" && meBag.activeDeckCode.trim()) {
+          return meBag.activeDeckCode.trim();
         }
-      } catch (err) {
-        // Deck selection failed — agent likely already has one.
-        // Other errors (network, auth) will surface when startBattle runs.
-        console.warn(
-          "[LTCG] Deck selection skipped:",
-          err instanceof Error ? err.message : String(err),
-        );
+        if (
+          typeof meBag.activeDeck === "object" &&
+          meBag.activeDeck !== null &&
+          typeof (meBag.activeDeck as { deckCode?: unknown }).deckCode === "string"
+        ) {
+          const value = (meBag.activeDeck as { deckCode?: unknown }).deckCode;
+          if (typeof value === "string" && value.trim()) return value.trim();
+        }
+        return null;
+      })();
+      const hasActiveDeckHint = "activeDeckCode" in meBag || "activeDeck" in meBag;
+      if (hasActiveDeckHint && !activeDeckCode) {
+        throw new Error("No active deck selected. Set your active deck before starting a battle.");
       }
 
       // Get first available chapter
-      const chapters = await client.getChapters();
-      if (!chapters.length) {
+      const chapters = (await client.getChapters()) ?? [];
+      if (!Array.isArray(chapters) || !chapters.length) {
         throw new Error("No story chapters available. Run seed first.");
       }
       const chapter = chapters[0];
@@ -76,7 +80,15 @@ export const startBattleAction: Action = {
       return { success: true, data: { matchId: result.matchId } };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const text = `Failed to start battle: ${msg}`;
+      const normalized = msg.toLowerCase();
+      const isDeckMissingError =
+        normalized.includes("deck") &&
+        (normalized.includes("active") ||
+          normalized.includes("missing") ||
+          normalized.includes("select"));
+      const text = isDeckMissingError
+        ? "No active deck selected. Please choose a starter deck before starting the battle."
+        : `Failed to start battle: ${msg}`;
       if (callback) await callback({ text });
       return { success: false, error: msg };
     }

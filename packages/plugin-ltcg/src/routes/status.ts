@@ -12,6 +12,7 @@
  */
 
 import { getClient } from "../client.js";
+import { resolveLifePoints, resolvePhase } from "../shared/gameView.js";
 import type { Route, RouteRequest, RouteResponse, IAgentRuntime } from "../types.js";
 
 export const statusRoute: Route = {
@@ -33,7 +34,6 @@ export const statusRoute: Route = {
         process.env.LTCG_SOUNDTRACK_API_URL ||
         null;
 
-      // Build status payload
       const status: Record<string, unknown> = {
         plugin: "ltcg",
         status: "ok",
@@ -47,24 +47,26 @@ export const statusRoute: Route = {
         },
       };
 
-      // If there's an active match, include its state
       if (matchId) {
         try {
-          const view = await client.getView(matchId);
+          const view = await client.getView(matchId, "host");
+          const phase = resolvePhase(view);
+          const { myLP, oppLP } = resolveLifePoints(view);
+          const handSize = Array.isArray(view.hand) ? view.hand.length : 0;
+
           status.match = {
-            phase: view.phase,
+            phase,
             gameOver: view.gameOver,
             isMyTurn: view.currentTurnPlayer === "host",
-            myLP: view.players.host.lifePoints,
-            oppLP: view.players.away.lifePoints,
-            handSize: view.hand.length,
+            myLP,
+            oppLP,
+            handSize,
           };
         } catch {
           status.match = { error: "Unable to fetch match state" };
         }
       }
 
-      // Get agent info
       try {
         const me = await client.getMe();
         status.agent = {
@@ -78,7 +80,6 @@ export const statusRoute: Route = {
 
       res.status(200).json(status);
     } catch {
-      // Client not initialized
       res.status(503).json({
         plugin: "ltcg",
         status: "disconnected",
@@ -90,3 +91,4 @@ export const statusRoute: Route = {
     }
   },
 };
+

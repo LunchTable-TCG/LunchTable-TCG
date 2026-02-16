@@ -15,6 +15,7 @@ import type {
   Provider,
   State,
 } from "./types.js";
+import { resolveLifePoints, resolvePhase } from "./shared/gameView.js";
 
 export const gameStateProvider: Provider = {
   name: "ltcg-game-state",
@@ -41,12 +42,13 @@ export const gameStateProvider: Provider = {
     }
 
     try {
-      const view = await client.getView(matchId);
+      const view = await client.getView(matchId, "host");
+      const phase = resolvePhase(view);
       return {
         text: formatView(view, matchId),
         values: {
           ltcgMatchId: matchId,
-          ltcgPhase: view.phase,
+          ltcgPhase: phase,
           ltcgIsMyTurn: String(view.currentTurnPlayer === "host"),
         },
       };
@@ -62,9 +64,9 @@ export const gameStateProvider: Provider = {
 // ── Formatting ───────────────────────────────────────────────────
 
 function formatView(v: PlayerView, matchId: string): string {
+  const phase = resolvePhase(v);
+  const { myLP, oppLP } = resolveLifePoints(v);
   if (v.gameOver) {
-    const myLP = v.players.host.lifePoints;
-    const oppLP = v.players.away.lifePoints;
     const outcome =
       myLP > oppLP ? "VICTORY!" : myLP < oppLP ? "DEFEAT." : "DRAW.";
     return `=== LTCG MATCH ${matchId} — GAME OVER ===\nFinal LP: You ${myLP} — Opponent ${oppLP}\n${outcome}`;
@@ -73,16 +75,19 @@ function formatView(v: PlayerView, matchId: string): string {
   const isMyTurn = v.currentTurnPlayer === "host";
   const lines: string[] = [
     `=== LTCG MATCH ${matchId} ===`,
-    `Phase: ${v.phase} | ${isMyTurn ? "YOUR TURN" : "OPPONENT'S TURN"}`,
-    `LP: You ${v.players.host.lifePoints} | Opponent ${v.players.away.lifePoints}`,
+    `Phase: ${phase} | ${isMyTurn ? "YOUR TURN" : "OPPONENT'S TURN"}`,
+    `LP: You ${myLP} | Opponent ${oppLP}`,
     "",
   ];
 
   // Hand — grouped by card type
-  const hand = v.hand ?? [];
+  const hand = normalizeHand(v.hand ?? []);
   const monsters = hand.filter((c) => c.cardType === "stereotype");
   const spells = hand.filter((c) => c.cardType === "spell");
   const traps = hand.filter((c) => c.cardType === "trap");
+  const others = hand.filter(
+    (c) => !["stereotype", "spell", "trap"].includes(c.cardType),
+  );
 
   lines.push(`Your hand (${hand.length}):`);
   if (hand.length === 0) {
@@ -91,6 +96,7 @@ function formatView(v: PlayerView, matchId: string): string {
     for (const c of monsters) lines.push(`  ${formatHandCard(c)}`);
     for (const c of spells) lines.push(`  ${formatHandCard(c)}`);
     for (const c of traps) lines.push(`  ${formatHandCard(c)}`);
+    for (const c of others) lines.push(`  ${formatHandCard(c)}`);
   }
 
   // Player field
@@ -130,7 +136,38 @@ function formatView(v: PlayerView, matchId: string): string {
   return lines.join("\n");
 }
 
-function formatHandCard(c: CardInHand): string {
+type NormalizedHandCard = {
+  cardType: "stereotype" | "spell" | "trap" | "unknown";
+  name: string;
+  attack?: number;
+  defense?: number;
+  level?: number;
+  instanceId: string;
+};
+
+function normalizeHand(hand: CardInHand[]): NormalizedHandCard[] {
+  return hand.map((c) => {
+    if (typeof c === "string") {
+      const trimmed = c.trim();
+      return {
+        cardType: "unknown",
+        name: trimmed || "Unknown card",
+        instanceId: trimmed,
+      };
+    }
+
+    return {
+      cardType: c.cardType ?? "unknown",
+      name: c.name,
+      attack: c.attack,
+      defense: c.defense,
+      level: c.level,
+      instanceId: c.instanceId ?? c.cardId ?? "unknown",
+    };
+  });
+}
+
+function formatHandCard(c: NormalizedHandCard): string {
   if (c.cardType === "stereotype") {
     return `${c.name} (ATK:${c.attack ?? "?"} DEF:${c.defense ?? "?"} Lv:${c.level ?? "?"} id:${c.instanceId})`;
   }

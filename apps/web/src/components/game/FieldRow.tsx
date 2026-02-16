@@ -18,13 +18,16 @@ export function FieldRow({
   onSlotClick,
   reversed = false,
 }: FieldRowProps) {
-  const slots = Array.from({ length: maxSlots });
+  const safeMaxSlots = Math.max(0, Math.floor(maxSlots));
+  const slots = Array.from({ length: safeMaxSlots });
+  const orderedCards = reversed
+    ? cards.slice(-safeMaxSlots).reverse()
+    : cards.slice(0, safeMaxSlots);
 
   return (
     <div className="flex gap-1 justify-center">
       {slots.map((_, i) => {
-        const cardIndex = reversed ? cards.length - 1 - i : i;
-        const card = cards[cardIndex];
+        const card = orderedCards[i];
         const cardDef = card ? cardLookup[card.cardId] : undefined;
         const isHighlighted = card && highlightIds?.has(card.cardId);
 
