@@ -5,6 +5,7 @@ import { apiAny, useConvexQuery, useConvexMutation } from "@/lib/convexHelpers";
 import { VictoryScreen } from "@/components/story";
 import { GameBoard } from "@/components/game/GameBoard";
 import { type Seat } from "@/components/game/hooks/useGameState";
+import { normalizeMatchId } from "@/lib/matchIds";
 
 type MatchMeta = {
   status: string;
@@ -43,12 +44,7 @@ type StoryContext = {
 
 export function Play() {
   const { matchId } = useParams<{ matchId: string }>();
-  const reservedMatchIds = new Set(["undefined", "null", "skip"]);
-  const normalizedMatchId = matchId?.trim();
-  const activeMatchId =
-    normalizedMatchId && !reservedMatchIds.has(normalizedMatchId.toLowerCase())
-      ? normalizedMatchId
-      : null;
+  const activeMatchId = normalizeMatchId(matchId);
 
   const meta = useConvexQuery(
     apiAny.game.getMatchMeta,
@@ -72,18 +68,7 @@ export function Play() {
   const [completion, setCompletion] = useState<StoryCompletion | null>(null);
   const completingRef = useRef(false);
 
-  const playerSeat =
-    currentUser && meta
-      ? currentUser._id === meta.hostId
-        ? "host"
-        : currentUser._id === meta.awayId
-            ? "away"
-            : isStory && meta.isAIOpponent && meta.awayId === "cpu"
-              ? "host"
-              : isStory && meta.isAIOpponent && meta.hostId === "cpu"
-                ? "away"
-                : null
-      : null;
+  const playerSeat = resolvePlayerSeat(currentUser ?? null, meta, isStory);
 
   const storyWon = resolveStoryWon(meta?.winner, playerSeat);
 
@@ -143,6 +128,19 @@ export function Play() {
 function resolveStoryWon(winner: string | undefined, seat: Seat | null): boolean {
   if (!winner) return false;
   return winner === seat;
+}
+
+function resolvePlayerSeat(
+  currentUser: CurrentUser | null,
+  meta: MatchMeta | null | undefined,
+  isStory: boolean,
+): Seat | null {
+  if (!currentUser || !meta) return null;
+  if (currentUser._id === meta.hostId) return "host";
+  if (currentUser._id === meta.awayId) return "away";
+  if (isStory && meta.isAIOpponent && meta.awayId === "cpu") return "host";
+  if (isStory && meta.isAIOpponent && meta.hostId === "cpu") return "away";
+  return null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

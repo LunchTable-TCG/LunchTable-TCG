@@ -13,6 +13,7 @@ import {
 } from "@/components/story";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { STAGES_BG, QUESTIONS_LABEL } from "@/lib/blobUrls";
+import { normalizeMatchId } from "@/lib/matchIds";
 
 export function StoryChapter() {
   return (
@@ -38,7 +39,6 @@ function StoryChapterInner() {
   const startBattle = useConvexMutation(apiAny.game.startStoryBattle);
   const [starting, setStarting] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const RESERVED_MATCH_IDS = new Set(["undefined", "null", "skip"]);
 
   const sorted = [...(stages ?? [])].sort((a, b) => a.stageNumber - b.stageNumber);
 
@@ -61,8 +61,8 @@ function StoryChapterInner() {
         stageNumber: stage.stageNumber,
       }) as { matchId?: string };
 
-      const nextMatchId = typeof result?.matchId === "string" ? result.matchId.trim() : "";
-      if (!nextMatchId || RESERVED_MATCH_IDS.has(nextMatchId.toLowerCase())) {
+      const nextMatchId = normalizeMatchId(typeof result?.matchId === "string" ? result.matchId : null);
+      if (!nextMatchId) {
         throw new Error("No match ID was returned from the battle starter.");
       }
 

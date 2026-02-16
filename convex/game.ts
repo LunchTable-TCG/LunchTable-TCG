@@ -302,6 +302,20 @@ export const getFullStoryProgress = query({
   },
 });
 
+export function getDeckCardIdsFromDeckData(deckData: any): string[] {
+  const playerDeck: string[] = [];
+  for (const card of (deckData as any).cards ?? []) {
+    for (let i = 0; i < (card.quantity ?? 1); i++) {
+      playerDeck.push(card.cardDefinitionId);
+    }
+  }
+  return playerDeck;
+}
+
+export function findStageByNumber(stages: any, stageNumber: number) {
+  return (stages as any[])?.find((s: any) => s.stageNumber === stageNumber);
+}
+
 // ── Start Story Battle ─────────────────────────────────────────────
 
 export const startStoryBattle = mutation({
@@ -315,19 +329,12 @@ export const startStoryBattle = mutation({
 
     // Resolve the stage to get its _id for progress tracking
     const stages = await story.stages.getStages(ctx, args.chapterId);
-    const stage = (stages as any[])?.find(
-      (s: any) => s.stageNumber === stageNum,
-    );
+    const stage = findStageByNumber(stages, stageNum);
     if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
 
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
-    const playerDeck: string[] = [];
-    for (const card of (deckData as any).cards ?? []) {
-      for (let i = 0; i < (card.quantity ?? 1); i++) {
-        playerDeck.push(card.cardDefinitionId);
-      }
-    }
+    const playerDeck = getDeckCardIdsFromDeckData(deckData);
     if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
 
     const allCards = await cards.cards.getAllCards(ctx);
@@ -754,9 +761,7 @@ export const getStoryMatchContext = query({
 
     // Load the stage data for dialogue and reward info
     const stages = await story.stages.getStages(ctx, doc.chapterId);
-    const stage = (stages as any[])?.find(
-      (s: any) => s.stageNumber === doc.stageNumber,
-    );
+    const stage = findStageByNumber(stages, doc.stageNumber);
 
     return {
       matchId: doc.matchId,
@@ -865,9 +870,7 @@ export const completeStoryStage = mutation({
 
     // Look up stage for rewards
     const stages = await story.stages.getStages(ctx, storyMatch.chapterId);
-    const stage = (stages as any[])?.find(
-      (s: any) => s.stageNumber === storyMatch.stageNumber,
-    );
+    const stage = findStageByNumber(stages, storyMatch.stageNumber);
 
     const rewardGold = won ? (stage?.rewardGold ?? 0) : 0;
     const rewardXp = won ? (stage?.rewardXp ?? 0) : 0;

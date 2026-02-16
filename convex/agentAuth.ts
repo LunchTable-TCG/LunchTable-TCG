@@ -6,7 +6,7 @@ import { LTCGMatch } from "@lunchtable-tcg/match";
 import { LTCGStory } from "@lunchtable-tcg/story";
 import { createInitialState, DEFAULT_CONFIG, buildCardLookup } from "@lunchtable-tcg/engine";
 import { DECK_RECIPES } from "./cardData";
-import { buildAIDeck } from "./game";
+import { buildAIDeck, findStageByNumber, getDeckCardIdsFromDeckData } from "./game";
 import {
   activateDeckForUser,
   resolveStarterDeck,
@@ -110,19 +110,12 @@ export const agentStartBattle = mutation({
 
     // Resolve stage to get stageId for progress tracking
     const stages = await story.stages.getStages(ctx, args.chapterId);
-    const stage = (stages as any[])?.find(
-      (s: any) => s.stageNumber === stageNum,
-    );
+    const stage = findStageByNumber(stages, stageNum);
     if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
 
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
-    const playerDeck: string[] = [];
-    for (const card of (deckData as any).cards ?? []) {
-      for (let i = 0; i < (card.quantity ?? 1); i++) {
-        playerDeck.push(card.cardDefinitionId);
-      }
-    }
+    const playerDeck = getDeckCardIdsFromDeckData(deckData);
     if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
 
     const allCards = await cards.cards.getAllCards(ctx);
@@ -198,12 +191,7 @@ export const agentStartDuel = mutation({
     if (!user) throw new Error("Agent user not found");
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
-    const playerDeck: string[] = [];
-    for (const card of (deckData as any).cards ?? []) {
-      for (let i = 0; i < (card.quantity ?? 1); i++) {
-        playerDeck.push(card.cardDefinitionId);
-      }
-    }
+    const playerDeck = getDeckCardIdsFromDeckData(deckData);
     if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
 
     const allCards = await cards.cards.getAllCards(ctx);
