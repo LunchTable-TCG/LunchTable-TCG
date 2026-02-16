@@ -152,7 +152,7 @@ export function ChapterMap() {
                   {(chapter.imageUrl || CHAPTER_IMAGES[i + 1]) && (
                     <img
                       src={chapter.imageUrl || CHAPTER_IMAGES[i + 1]}
-                      alt=""
+                      alt={`${chapter.title || 'Chapter'} ${chapter.chapterNumber} background`}
                       className={`absolute inset-0 w-full h-full object-cover transition-opacity ${locked
                         ? "opacity-10 grayscale"
                         : "opacity-20 group-hover:opacity-30"

@@ -160,7 +160,7 @@ export function Leaderboard() {
                         <div className="w-10 h-10 bg-black rounded-full overflow-hidden border-2 border-black flex-shrink-0">
                           <img
                             src={entry.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.name}`}
-                            alt="avatar"
+                            alt={`${entry.name}'s avatar`}
                             className="w-full h-full object-cover"
                           />
                         </div>

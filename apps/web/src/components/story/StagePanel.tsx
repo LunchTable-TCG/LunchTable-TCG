@@ -73,7 +73,7 @@ export function StagePanel({
       {bannerImage && (
         <img
           src={bannerImage}
-          alt=""
+          alt={`Stage ${stage.stageNumber} - ${stage.name || chapter?.title || 'Battle stage'}`}
           className={`absolute inset-0 w-full h-full object-cover transition-all ${
             completed
               ? "opacity-40 grayscale"
