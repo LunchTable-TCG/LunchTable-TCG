@@ -643,14 +643,13 @@ function pickAICommand(
       if (attackableMonsters.length > 0) {
         return { type: "ADVANCE_PHASE" };
       }
+
+      // Default for main phase: end turn
+      return { type: "END_TURN" };
     }
 
     // 4. If main2: end turn
     if (phase === "main2") {
-      return { type: "END_TURN" };
-    }
-
-    // Default for main phase: end turn
       return { type: "END_TURN" };
     }
 

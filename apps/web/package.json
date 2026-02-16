@@ -27,6 +27,7 @@
   "scripts": {
     "dev": "vite --port 3334",
     "build": "tsc -b && vite build",
+    "build:vercel": "vite build",
     "preview": "vite preview --port 3334",
     "type-check": "tsc --noEmit",
     "upload:soundtrack": "bun run scripts/migrate-soundtrack-to-blob.ts"

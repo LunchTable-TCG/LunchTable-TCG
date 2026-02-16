@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd apps/web && bun run build",
+  "buildCommand": "cd apps/web && bun run build:vercel",
   "devCommand": "bun run dev",
   "installCommand": "bun install",
   "framework": "vite",
@@ -7,6 +7,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/"
     }
   ],
   "headers": [
