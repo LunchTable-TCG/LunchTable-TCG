@@ -124,11 +124,7 @@ export async function playOneTurn(
 
   const extractCardId = (card: CardInHand | string): string => {
     if (typeof card === "string") return card.trim();
-    const cardLike = card as CardInHand & {
-      cardId?: string;
-      instanceId?: string;
-    };
-    return String(cardLike.instanceId ?? cardLike.cardId ?? "").trim();
+    return String(card.cardId ?? card.instanceId ?? "").trim();
   };
 
   const isMyTurnAndAlive = (): boolean =>

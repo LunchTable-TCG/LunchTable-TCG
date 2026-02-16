@@ -176,6 +176,7 @@ export interface StarterDeck {
 /** Card in the player's hand (from PlayerView.hand) */
 export interface CardInHand {
   instanceId: string;
+  cardId?: string;
   cardType: "stereotype" | "spell" | "trap";
   name: string;
   attack?: number;

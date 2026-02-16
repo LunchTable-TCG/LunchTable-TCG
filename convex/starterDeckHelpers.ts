@@ -1,7 +1,8 @@
-type ExistingDeckLike = {
+export type ExistingDeckLike = {
   name?: string;
   deckArchetype?: unknown;
   deckId?: string;
+  cardCount?: number;
 };
 
 export function resolveStarterDeck(existingDecks: ExistingDeckLike[], deckCode: string) {
@@ -27,8 +28,7 @@ export async function activateDeckForUser(
   nextDeckId: string,
   setActiveDeck: (ctx: any, userId: string, deckId: string) => Promise<unknown>,
 ) {
+  if (activeDeckId === nextDeckId) return;
   await setActiveDeck(ctx, userId, nextDeckId);
-  if (activeDeckId !== nextDeckId) {
-    await ctx.db.patch(userId, { activeDeckId: nextDeckId });
-  }
+  await ctx.db.patch(userId, { activeDeckId: nextDeckId });
 }

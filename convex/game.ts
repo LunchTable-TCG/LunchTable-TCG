@@ -12,6 +12,7 @@ import { DECK_RECIPES, STARTER_DECKS } from "./cardData";
 import {
   MAX_AI_TURN_ACTIONS,
   MAX_MONSTER_ZONE_SIZE,
+  MAX_SPELL_TRAP_ZONE_SIZE,
 } from "../shared/turnConstants";
 import {
   activateDeckForUser,
@@ -220,8 +221,14 @@ export const selectStarterDeck = mutation({
     await cards.decks.saveDeck(ctx, deckId, resolvedCards);
 
     // Set as active
-    await cards.decks.setActiveDeck(ctx, user._id, deckId);
-    await ctx.db.patch(user._id, { activeDeckId: deckId });
+    await activateDeckForUser(
+      ctx,
+      user._id,
+      user.activeDeckId,
+      deckId,
+      (dbCtx, userId, nextDeckId) =>
+        cards.decks.setActiveDeck(dbCtx, userId, nextDeckId),
+    );
 
     const totalCards = resolvedCards.reduce((sum, c) => sum + c.quantity, 0);
     return { deckId, cardCount: totalCards };
@@ -553,7 +560,10 @@ function pickAICommand(
         (c: any) => c.def?.cardType === "spell" || c.def?.cardType === "trap"
       );
 
-    if (spellsTrapsInHand.length > 0 && spellTrapZone.length < MAX_MONSTER_ZONE_SIZE) {
+    if (
+      spellsTrapsInHand.length > 0 &&
+      spellTrapZone.length < MAX_SPELL_TRAP_ZONE_SIZE
+    ) {
       return {
         type: "SET_SPELL_TRAP",
         cardId: spellsTrapsInHand[0].id,
@@ -576,55 +586,54 @@ function pickAICommand(
     }
 
     // Default for main phase: end turn
-      return { type: "END_TURN" };
-    }
+    return { type: "END_TURN" };
+  }
 
-    // Combat phase
-    if (phase === "combat") {
-      // Find all monsters that can attack
-      const attackableMonsters = board.filter(
-        (c: any) => !c.faceDown && c.canAttack && !c.hasAttackedThisTurn
-      );
+  // Combat phase
+  if (phase === "combat") {
+    // Find all monsters that can attack
+    const attackableMonsters = board.filter(
+      (c: any) => !c.faceDown && c.canAttack && !c.hasAttackedThisTurn
+    );
 
-      if (attackableMonsters.length > 0) {
-        const attacker = attackableMonsters[0];
-        const attackerId = attacker?.cardId ?? attacker?.instanceId;
-        if (!attackerId) return { type: "ADVANCE_PHASE" };
+    if (attackableMonsters.length > 0) {
+      const attacker = attackableMonsters[0];
+      const attackerId = attacker?.cardId ?? attacker?.instanceId;
+      if (!attackerId) return { type: "ADVANCE_PHASE" };
 
-        // Check opponent monsters (including face-down)
-        const opponentMonsters = opponentBoard;
+      // Check opponent monsters (including face-down)
+      const opponentMonsters = opponentBoard;
 
-        if (opponentMonsters.length === 0) {
-          // Direct attack
-          return {
-            type: "DECLARE_ATTACK",
-            attackerId,
-          };
-        }
-
-        // Find weakest opponent monster
-        let weakestOpponent = opponentMonsters[0];
-        let weakestAtk =
-          (cardLookup[weakestOpponent.definitionId]?.attack ?? 0) +
-          (weakestOpponent.temporaryBoosts?.attack ?? 0);
-
-        for (const opp of opponentMonsters) {
-          const oppAtk =
-            (cardLookup[opp.definitionId]?.attack ?? 0) +
-            (opp.temporaryBoosts?.attack ?? 0);
-          if (oppAtk < weakestAtk) {
-            weakestOpponent = opp;
-            weakestAtk = oppAtk;
-          }
-        }
-
-        const targetId = weakestOpponent.cardId ?? weakestOpponent.instanceId;
+      if (opponentMonsters.length === 0) {
+        // Direct attack
         return {
           type: "DECLARE_ATTACK",
           attackerId,
-          targetId,
         };
       }
+
+      // Find weakest opponent monster
+      let weakestOpponent = opponentMonsters[0];
+      let weakestAtk =
+        (cardLookup[weakestOpponent.definitionId]?.attack ?? 0) +
+        (weakestOpponent.temporaryBoosts?.attack ?? 0);
+
+      for (const opp of opponentMonsters) {
+        const oppAtk =
+          (cardLookup[opp.definitionId]?.attack ?? 0) +
+          (opp.temporaryBoosts?.attack ?? 0);
+        if (oppAtk < weakestAtk) {
+          weakestOpponent = opp;
+          weakestAtk = oppAtk;
+        }
+      }
+
+      const targetId = weakestOpponent.cardId ?? weakestOpponent.instanceId;
+      return {
+        type: "DECLARE_ATTACK",
+        attackerId,
+        targetId,
+      };
     }
 
     // No attacks possible, advance phase
@@ -654,8 +663,8 @@ export const executeAITurn = internalMutation({
       cardLookup[card._id] = card;
     }
 
-  // Loop up to MAX_Ai_TURN_ACTIONS actions
-  for (let i = 0; i < MAX_AI_TURN_ACTIONS; i++) {
+    // Loop up to MAX_AI_TURN_ACTIONS actions
+    for (let i = 0; i < MAX_AI_TURN_ACTIONS; i++) {
       const viewJson = await match.getPlayerView(ctx, {
         matchId: args.matchId,
         seat: aiSeat,

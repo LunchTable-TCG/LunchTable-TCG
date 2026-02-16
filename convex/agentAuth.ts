@@ -297,8 +297,14 @@ export const agentSelectStarterDeck = mutation({
       deckArchetype: archetype,
     });
     await cards.decks.saveDeck(ctx, deckId, resolvedCards);
-    await cards.decks.setActiveDeck(ctx, user._id, deckId);
-    await ctx.db.patch(user._id, { activeDeckId: deckId });
+    await activateDeckForUser(
+      ctx,
+      user._id,
+      (user as any).activeDeckId,
+      deckId,
+      (dbCtx, userId, nextDeckId) =>
+        cards.decks.setActiveDeck(dbCtx, userId, nextDeckId),
+    );
 
     const totalCards = resolvedCards.reduce((sum, c) => sum + c.quantity, 0);
     return { deckId, cardCount: totalCards };
