@@ -13,7 +13,7 @@ LunchTable: School of Hard Knocks is a white-label trading card game designed fo
 │                   milaidy (Electron)                │
 │  ┌───────────────────────────────────────────────┐  │
 │  │            <iframe> Game Client               │  │
-│  │         (TanStack Start + React 19)           │  │
+ │  │         (React Router 7 + React 19)          │  │
 │  │                                               │  │
 │  │  ┌─────────┐  ┌──────────┐  ┌─────────────┐  │  │
 │  │  │Game Board│  │Deck Build│  │Story Mode   │  │  │
@@ -118,21 +118,25 @@ LunchTable: School of Hard Knocks is a white-label trading card game designed fo
 
 ```
 apps/web/
-├── routes/              # TanStack Start file-based routes
-│   ├── _app.*          # Main app layout (sidebar)
-│   └── _game.*         # Game layout (fullscreen)
-├── components/
-│   ├── ui/             # Radix primitives (shadcn pattern)
-│   ├── game/           # Game board, cards, controls
-│   ├── story/          # Story mode UI
-│   ├── collection/     # Card binder, deck builder
-│   └── streaming/      # retake.tv iframe, spectator
-├── hooks/              # Domain-organized hooks
-├── lib/                # Utilities, helpers, config
-│   ├── convexHelpers.ts
-│   ├── archetypeThemes.ts
-│   └── config/
-└── stores/             # Zustand state stores
+├── src/
+│   ├── App.tsx              # React Router 7 routes
+│   ├── main.tsx             # ConvexProvider setup
+│   ├── pages/               # Route page components (Home, Play, Story, etc.)
+│   ├── components/
+│   │   ├── ui/             # Radix primitives (shadcn pattern)
+│   │   ├── game/           # Game board, cards, controls
+│   │   ├── story/          # Story mode UI
+│   │   ├── collection/     # Card binder, deck builder
+│   │   ├── auth/           # Privy auth
+│   │   └── streaming/      # retake.tv iframe, spectator
+│   ├── hooks/              # Domain-organized hooks
+│   ├── lib/               # Utilities, helpers
+│   │   ├── convexHelpers.ts
+│   │   ├── archetypeThemes.ts
+│   │   └── iframe.ts
+│   └── stores/            # Zustand state stores
+├── index.html              # Entry HTML
+└── vite.config.ts          # Vite + React + Tailwind plugins
 ```
 
 ## Embedding Strategy

@@ -19,7 +19,7 @@ ElizaOS Agent (plugin-ltcg)
 
 ## ElizaOS Plugin Reference
 
-Original plugin: `/Users/home/Desktop/LTCG/packages/plugin-ltcg/`
+Original plugin: `packages/plugin-ltcg/`
 
 ### Key Actions (26 total)
 - `startMatch` - Queue for matchmaking or start story battle

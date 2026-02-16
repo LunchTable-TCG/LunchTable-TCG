@@ -16,7 +16,7 @@ milaidy (Electron)
 │   └── BrowserWindow
 └── Renderer Process
     └── <iframe src="https://lunchtable.app/play" />
-        └── LTCG Game Client (TanStack Start)
+        └── LTCG Game Client (React Router 7)
 ```
 
 ## Embedding Approach

@@ -12,13 +12,13 @@ Each agent owns a domain and its associated files. Agents should NOT modify file
 |--------|-------------|-------|--------------|
 | Game Board UI | game-ui | `components/game/` | engine types, convex queries |
 | Card Collection | collection-ui | `components/collection/` | convex card queries |
-| Deck Builder | deckbuilder-ui | `components/deck/` | convex deck mutations |
+| Deck Builder | deckbuilder-ui | `pages/DeckBuilder.tsx` | convex deck mutations |
 | Story Mode | story-ui | `components/story/` | convex story queries |
 | Auth & Profile | auth-ui | `components/auth/` | Privy, convex auth |
 | Streaming | stream-ui | `components/streaming/` | retake.tv iframe |
 | Game Engine | engine-dev | `packages/engine/` | standalone |
+| ElizaOS Plugin | plugin-dev | `packages/plugin-ltcg/` | Convex API |
 | Convex Backend | backend-dev | `convex/` | all components |
-| Embed/iframe | embed-dev | `routes/embed/` | postMessage API |
 
 ## Coordination Rules
 
@@ -27,7 +27,7 @@ Each agent owns a domain and its associated files. Agents should NOT modify file
 - `lib/convexHelpers.ts` - shared type helpers
 - `lib/archetypeThemes.ts` - shared theme config
 - `globals.css` - shared styles
-- `__root.tsx` - root layout/providers
+- `App.tsx` - root layout with providers
 - `package.json` - dependencies
 
 ### Safe to Own (no coordination needed)

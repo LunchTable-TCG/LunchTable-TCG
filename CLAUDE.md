@@ -17,6 +17,7 @@ LTCG-v2/
 │   └── cardData.ts            # 132 card definitions (6 archetypes x 22)
 ├── packages/
 │   ├── engine/                # Pure TS game engine (zero deps)
+│   ├── plugin-ltcg/           # ElizaOS plugin for AI agents
 │   ├── lunchtable-tcg-cards/  # Convex component: card inventory + decks
 │   ├── lunchtable-tcg-match/  # Convex component: event-sourced matches
 │   └── lunchtable-tcg-story/  # Convex component: story mode progression
@@ -86,6 +87,7 @@ This project uses **multiple Claude agents working on sections independently**.
 | Auth/Profile | `apps/web/src/components/auth/` | Privy integration, profiles |
 | Streaming | `apps/web/src/components/streaming/` | retake.tv iframe |
 | Game Engine | `packages/engine/` | Pure TS, no Convex deps |
+| ElizaOS Plugin | `packages/plugin-ltcg/` | AI agent actions + decision engine |
 | Convex Backend | `convex/` | Shared - coordinate changes |
 
 ## TypeScript Conventions
@@ -228,11 +230,14 @@ packages/engine/src/engine.ts            # Core: decide, evolve, mask, legalMove
 packages/engine/src/types/state.ts       # GameState, PlayerView, BoardCard
 packages/engine/src/types/commands.ts    # Command union type
 
+# ElizaOS Plugin
+packages/plugin-ltcg/src/index.ts       # Plugin entry, actions, decision engine
+
 # Component Clients
 packages/lunchtable-tcg-cards/src/client/index.ts
 packages/lunchtable-tcg-match/src/client/index.ts
 packages/lunchtable-tcg-story/src/client/index.ts
 
 # Reference (patterns only - don't build from here)
-reference/frontend/                      # TanStack Start reference
+reference/frontend/                      # TanStack Start reference (old patterns)
 ```
