@@ -69,8 +69,43 @@ describe("validateDeck", () => {
   const lookup = defineCards(sampleCards);
 
   it("validates a legal deck", () => {
-    const deck = Array(40).fill("warrior-1");
-    const result = validateDeck(deck, lookup, { min: 40, max: 60 });
+    // Need multiple cards to build a 40-card deck without exceeding 3 copies
+    const deckCards: CardDefinition[] = [
+      ...sampleCards,
+      { id: "warrior-2", name: "Test Warrior 2", type: "stereotype", description: "", rarity: "common", attack: 1000, defense: 1000, level: 3 },
+      { id: "warrior-3", name: "Test Warrior 3", type: "stereotype", description: "", rarity: "common", attack: 800, defense: 800, level: 2 },
+      { id: "warrior-4", name: "Test Warrior 4", type: "stereotype", description: "", rarity: "common", attack: 600, defense: 600, level: 2 },
+      { id: "warrior-5", name: "Test Warrior 5", type: "stereotype", description: "", rarity: "common", attack: 400, defense: 400, level: 1 },
+      { id: "spell-2", name: "Test Spell 2", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-3", name: "Test Spell 3", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-4", name: "Test Spell 4", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-5", name: "Test Spell 5", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-6", name: "Test Spell 6", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-7", name: "Test Spell 7", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-8", name: "Test Spell 8", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-9", name: "Test Spell 9", type: "spell", description: "", rarity: "common", spellType: "normal" },
+      { id: "spell-10", name: "Test Spell 10", type: "spell", description: "", rarity: "common", spellType: "normal" },
+    ];
+    const deckLookup = defineCards(deckCards);
+
+    // 3 copies of 14 different cards = 42 cards (within 40-60 range)
+    const deck = [
+      ...Array(3).fill("warrior-1"),
+      ...Array(3).fill("warrior-2"),
+      ...Array(3).fill("warrior-3"),
+      ...Array(3).fill("warrior-4"),
+      ...Array(3).fill("warrior-5"),
+      ...Array(3).fill("spell-1"),
+      ...Array(3).fill("spell-2"),
+      ...Array(3).fill("spell-3"),
+      ...Array(3).fill("spell-4"),
+      ...Array(3).fill("spell-5"),
+      ...Array(3).fill("spell-6"),
+      ...Array(3).fill("spell-7"),
+      ...Array(3).fill("spell-8"),
+      ...Array(3).fill("spell-9"),
+    ];
+    const result = validateDeck(deck, deckLookup, { min: 40, max: 60 });
     expect(result.valid).toBe(true);
   });
 
@@ -86,6 +121,79 @@ describe("validateDeck", () => {
     const result = validateDeck(deck, lookup, { min: 40, max: 60 });
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain("Unknown card");
+  });
+});
+
+describe("deck copy limits", () => {
+  const lookup = defineCards(sampleCards);
+
+  it("rejects decks with more than 3 copies of the same card", () => {
+    // 4 copies of warrior-1 + 36 spell-1 = 40 cards total
+    const deck = [
+      ...Array(4).fill("warrior-1"),
+      ...Array(36).fill("spell-1"),
+    ];
+    const result = validateDeck(deck, lookup, { min: 40, max: 60 });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Card "warrior-1" has 4 copies (max 3)');
+  });
+
+  it("accepts decks with exactly 3 copies", () => {
+    // Need to create more sample cards to build a 40-card deck without exceeding 3 copies
+    const extraCards: CardDefinition[] = [
+      ...sampleCards,
+      { id: "spell-2", name: "Test Spell 2", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-3", name: "Test Spell 3", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-4", name: "Test Spell 4", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-5", name: "Test Spell 5", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-6", name: "Test Spell 6", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-7", name: "Test Spell 7", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-8", name: "Test Spell 8", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-9", name: "Test Spell 9", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-10", name: "Test Spell 10", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-11", name: "Test Spell 11", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-12", name: "Test Spell 12", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-13", name: "Test Spell 13", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+      { id: "spell-14", name: "Test Spell 14", type: "spell", description: "A test spell", rarity: "common", spellType: "normal" },
+    ];
+    const extendedLookup = defineCards(extraCards);
+
+    // 3 copies each of 14 different cards = 42 cards (over min of 40)
+    const deck = [
+      ...Array(3).fill("warrior-1"),
+      ...Array(3).fill("spell-1"),
+      ...Array(3).fill("spell-2"),
+      ...Array(3).fill("spell-3"),
+      ...Array(3).fill("spell-4"),
+      ...Array(3).fill("spell-5"),
+      ...Array(3).fill("spell-6"),
+      ...Array(3).fill("spell-7"),
+      ...Array(3).fill("spell-8"),
+      ...Array(3).fill("spell-9"),
+      ...Array(3).fill("spell-10"),
+      ...Array(3).fill("spell-11"),
+      ...Array(3).fill("spell-12"),
+      ...Array(3).fill("spell-13"),
+    ];
+    const result = validateDeck(deck, extendedLookup, { min: 40, max: 60 });
+    expect(result.valid).toBe(true);
+  });
+
+  it("respects custom maxCopies", () => {
+    // With maxCopies: 1, having 2 warrior-1 should fail
+    const deck = [
+      ...Array(2).fill("warrior-1"),
+      ...Array(38).fill("spell-1"),
+    ];
+    const result = validateDeck(deck, lookup, { min: 40, max: 60 }, { maxCopies: 1 });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Card "warrior-1" has 2 copies (max 1)');
+  });
+
+  it("allows unlimited copies when maxCopies is set very high", () => {
+    const deck = Array(40).fill("warrior-1");
+    const result = validateDeck(deck, lookup, { min: 40, max: 60 }, { maxCopies: 100 });
+    expect(result.valid).toBe(true);
   });
 });
 

@@ -58,12 +58,18 @@ export interface DeckValidation {
   errors: string[];
 }
 
+export interface DeckOptions {
+  maxCopies?: number;
+}
+
 export function validateDeck(
   deckCardIds: string[],
   cardLookup: CardLookup,
   sizeConstraint: { min: number; max: number },
+  options?: DeckOptions,
 ): DeckValidation {
   const errors: string[] = [];
+  const maxCopies = options?.maxCopies ?? 3;
 
   if (deckCardIds.length < sizeConstraint.min) {
     errors.push(`Deck has too few cards (${deckCardIds.length}/${sizeConstraint.min})`);
@@ -71,9 +77,21 @@ export function validateDeck(
   if (deckCardIds.length > sizeConstraint.max) {
     errors.push(`Deck has too many cards (${deckCardIds.length}/${sizeConstraint.max})`);
   }
+
+  // Count card occurrences and check for unknown cards
+  const counts = new Map<string, number>();
   for (const id of deckCardIds) {
     if (!cardLookup[id]) {
       errors.push(`Unknown card ID: ${id}`);
+    } else {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+
+  // Check copy limits
+  for (const [id, count] of counts) {
+    if (count > maxCopies) {
+      errors.push(`Card "${id}" has ${count} copies (max ${maxCopies})`);
     }
   }
 
