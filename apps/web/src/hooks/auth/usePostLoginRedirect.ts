@@ -18,6 +18,13 @@ export function usePostLoginRedirect() {
   const location = useLocation();
   const fired = useRef(false);
 
+  // Clear redirect when already authenticated (user can navigate freely)
+  useEffect(() => {
+    if (authenticated) {
+      sessionStorage.removeItem(REDIRECT_KEY);
+    }
+  }, [authenticated]);
+
   const consumeAndRedirect = useCallback(() => {
     if (fired.current) return;
     
@@ -27,7 +34,6 @@ export function usePostLoginRedirect() {
       sessionStorage.removeItem(REDIRECT_KEY);
       navigate(path);
     } else if (path === location.pathname) {
-      // Already on the target path, clear the redirect
       sessionStorage.removeItem(REDIRECT_KEY);
     }
   }, [navigate, location.pathname]);
@@ -36,6 +42,11 @@ export function usePostLoginRedirect() {
     if (!authenticated) return;
     consumeAndRedirect();
   }, [authenticated, consumeAndRedirect]);
+
+  // Reset fired ref on navigation to allow redirects for subsequent logins
+  useEffect(() => {
+    fired.current = false;
+  }, [location.pathname]);
 }
 
 /** Store a redirect path before triggering login. */
