@@ -65,7 +65,7 @@ function executeDestroy(
 
     for (const card of opponentZone) {
       events.push({ type: "CARD_DESTROYED", cardId: card.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: card.cardId, from: "spell_trap_zone" });
+      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: card.cardId, from: "spellTrapZone" });
     }
     if (opponentField) {
       events.push({ type: "CARD_DESTROYED", cardId: opponentField.cardId, reason: "effect" });
@@ -82,7 +82,7 @@ function executeDestroy(
         events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "board" });
       } else if (spellTrap) {
         events.push({ type: "CARD_DESTROYED", cardId: targetId, reason: "effect" });
-        events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "spell_trap_zone" });
+        events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "spellTrapZone" });
       }
     }
   }
@@ -149,6 +149,7 @@ function executeBoostAttack(
         field: "attack",
         amount: action.amount,
         source: sourceCardId,
+        duration: action.duration,
       });
     }
   }
@@ -176,6 +177,7 @@ function executeBoostDefense(
         field: "defense",
         amount: action.amount,
         source: sourceCardId,
+        duration: action.duration,
       });
     }
   }
@@ -228,7 +230,18 @@ function executeBanish(
 
   for (const targetId of targets) {
     const boardCard = findBoardCard(state, targetId);
-    const from = boardCard ? "board" : "hand"; // simplified
+    const spellTrap = boardCard ? null : findSpellTrapCard(state, targetId);
+    const inHostHand = state.hostHand.includes(targetId);
+    const inAwayHand = state.awayHand.includes(targetId);
+    const from =
+      boardCard
+        ? "board"
+        : spellTrap
+          ? "spellTrapZone"
+          : inHostHand || inAwayHand
+            ? "hand"
+            : "graveyard";
+
     events.push({ type: "CARD_BANISHED", cardId: targetId, from });
   }
 
@@ -245,7 +258,16 @@ function executeReturnToHand(
   for (const targetId of targets) {
     const boardCard = findBoardCard(state, targetId);
     const spellTrap = boardCard ? null : findSpellTrapCard(state, targetId);
-    const from = boardCard ? "board" : spellTrap ? "spell_trap_zone" : "graveyard";
+    const inHostHand = state.hostHand.includes(targetId);
+    const inAwayHand = state.awayHand.includes(targetId);
+    const from =
+      boardCard
+        ? "board"
+        : spellTrap
+          ? "spellTrapZone"
+          : inHostHand || inAwayHand
+            ? "hand"
+            : "graveyard";
     events.push({ type: "CARD_RETURNED_TO_HAND", cardId: targetId, from });
   }
 

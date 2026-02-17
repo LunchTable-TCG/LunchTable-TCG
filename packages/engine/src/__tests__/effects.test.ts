@@ -4,7 +4,7 @@ import type { CardDefinition, EffectAction } from "../types/cards.js";
 import { executeAction, findBoardCard } from "../effects/operations.js";
 import { executeEffect, findAbilityByTrigger } from "../effects/interpreter.js";
 import { resolveEffectActions, canActivateEffect, detectTriggerEffects } from "../rules/effects.js";
-import { createEngine } from "../engine.js";
+import { createEngine, evolve } from "../engine.js";
 import { defineCards } from "../cards.js";
 
 // ── Test Helpers ─────────────────────────────────────────────────
@@ -103,6 +103,31 @@ describe("executeAction", () => {
     expect(events[3]).toEqual({ type: "CARD_SENT_TO_GRAVEYARD", cardId: "monster_2", from: "board" });
   });
 
+  it("DESTROY all_spells_traps for opponent spell/trap zone cards uses spellTrapZone origin", () => {
+    const state = createMinimalState();
+    state.awaySpellTrapZone.push({
+      cardId: "trap_card",
+      definitionId: "trap-def",
+      faceDown: true,
+      activated: false,
+    });
+
+    const action: EffectAction = { type: "destroy", target: "all_spells_traps" };
+    const events = executeAction(state, action, "host", "source_card", []);
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toEqual({ type: "CARD_DESTROYED", cardId: "trap_card", reason: "effect" });
+    expect(events[1]).toEqual({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId: "trap_card",
+      from: "spellTrapZone",
+    });
+
+    const evolved = evolve(state, events);
+    expect(evolved.awaySpellTrapZone).toHaveLength(0);
+    expect(evolved.awayGraveyard).toContain("trap_card");
+  });
+
   it("DRAW generates correct number of CARD_DRAWN events", () => {
     const state = createMinimalState();
     const action: EffectAction = { type: "draw", count: 2 };
@@ -155,12 +180,13 @@ describe("executeAction", () => {
     const events = executeAction(state, action, "host", "monster_1", []);
 
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({
+    expect(events[0]).toMatchObject({
       type: "MODIFIER_APPLIED",
       cardId: "monster_1",
       field: "attack",
       amount: 300,
       source: "monster_1",
+      duration: "permanent",
     });
   });
 
@@ -172,12 +198,13 @@ describe("executeAction", () => {
     const events = executeAction(state, action, "host", "monster_1", []);
 
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({
+    expect(events[0]).toMatchObject({
       type: "MODIFIER_APPLIED",
       cardId: "monster_1",
       field: "defense",
       amount: 500,
       source: "monster_1",
+      duration: "turn",
     });
   });
 
@@ -214,6 +241,26 @@ describe("executeAction", () => {
     expect(events[0]).toEqual({ type: "CARD_BANISHED", cardId: "monster_1", from: "board" });
   });
 
+  it("BANISH resolves selected spell/trap origin from spellTrapZone", () => {
+    const state = createMinimalState();
+    state.awaySpellTrapZone.push({
+      cardId: "trap_card",
+      definitionId: "trap-def",
+      faceDown: true,
+      activated: false,
+    });
+
+    const action: EffectAction = { type: "banish", target: "selected" };
+    const events = executeAction(state, action, "host", "source_card", ["trap_card"]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "CARD_BANISHED", cardId: "trap_card", from: "spellTrapZone" });
+
+    const evolved = evolve(state, events);
+    expect(evolved.awaySpellTrapZone).toHaveLength(0);
+    expect(evolved.awayBanished).toContain("trap_card");
+  });
+
   it("RETURN_TO_HAND generates CARD_RETURNED_TO_HAND", () => {
     const state = createMinimalState();
     state.hostBoard.push(createBoardCard("monster_1"));
@@ -223,6 +270,88 @@ describe("executeAction", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({ type: "CARD_RETURNED_TO_HAND", cardId: "monster_1", from: "board" });
+  });
+
+  it("RETURN_TO_HAND removes from spellTrapZone and appends to hand exactly once", () => {
+    const state = createMinimalState();
+    state.awaySpellTrapZone.push({
+      cardId: "trap_card",
+      definitionId: "trap-def",
+      faceDown: true,
+      activated: false,
+    });
+
+    const action: EffectAction = { type: "return_to_hand", target: "selected" };
+    const events = executeAction(state, action, "host", "source_card", ["trap_card"]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "CARD_RETURNED_TO_HAND", cardId: "trap_card", from: "spellTrapZone" });
+
+    const evolved = evolve(state, events);
+    expect(evolved.awaySpellTrapZone).toHaveLength(0);
+    const occurrences = evolved.awayHand.filter((id) => id === "trap_card").length;
+    expect(occurrences).toBe(1);
+  });
+
+  it("RETURN_TO_HAND from spellTrapZone works for both players", () => {
+    const seats = ["host", "away"] as const;
+
+    for (const seat of seats) {
+      const state = createMinimalState();
+      const cardId = `trap_${seat}`;
+
+      if (seat === "host") {
+        state.hostSpellTrapZone.push({
+          cardId,
+          definitionId: `${cardId}-def`,
+          faceDown: true,
+          activated: false,
+        });
+      } else {
+        state.awaySpellTrapZone.push({
+          cardId,
+          definitionId: `${cardId}-def`,
+          faceDown: true,
+          activated: false,
+        });
+      }
+
+      const action: EffectAction = { type: "return_to_hand", target: "selected" };
+      const events = executeAction(state, action, seat, "source_card", [cardId]);
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ type: "CARD_RETURNED_TO_HAND", cardId, from: "spellTrapZone" });
+
+      const evolved = evolve(state, events);
+
+      if (seat === "host") {
+        expect(evolved.hostSpellTrapZone).toHaveLength(0);
+        const occurrences = evolved.hostHand.filter((id) => id === cardId).length;
+        expect(occurrences).toBe(1);
+        expect(evolved.awayHand).toHaveLength(0);
+      } else {
+        expect(evolved.awaySpellTrapZone).toHaveLength(0);
+        const occurrences = evolved.awayHand.filter((id) => id === cardId).length;
+        expect(occurrences).toBe(1);
+        expect(evolved.hostHand).toHaveLength(0);
+      }
+    }
+  });
+
+  it("RETURN_TO_HAND from hand removes before re-appending (no duplicates)", () => {
+    const state = createMinimalState();
+    state.hostHand = ["monster_1"];
+
+    const action: EffectAction = { type: "return_to_hand", target: "selected" };
+    const events = executeAction(state, action, "host", "source_card", ["monster_1"]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "CARD_RETURNED_TO_HAND", cardId: "monster_1", from: "hand" });
+
+    const evolved = evolve(state, events);
+    expect(evolved.hostHand).toHaveLength(1);
+    const occurrences = evolved.hostHand.filter((id) => id === "monster_1").length;
+    expect(occurrences).toBe(1);
   });
 });
 
@@ -1140,5 +1269,85 @@ describe("Effect Resolution - Integration", () => {
       "host"
     );
     expect(events2).toHaveLength(0);
+  });
+
+  it("END_TURN emits MODIFIER_EXPIRED and resets turn-duration boost", () => {
+    const engine = createEngine({
+      cardLookup: defineCards([
+        {
+          id: "boost-monster",
+          name: "Booster Warrior",
+          type: "stereotype",
+          description: "Can boost its own attack",
+          rarity: "common",
+          attack: 1000,
+          defense: 1000,
+          level: 4,
+          effects: [
+            {
+              id: "eff_self_boost",
+              type: "ignition",
+              description: "Boost own ATK by 500",
+              actions: [{ type: "boost_attack", amount: 500, duration: "turn" }],
+            },
+          ],
+        },
+        {
+          id: "filler",
+          name: "Filler",
+          type: "stereotype",
+          description: "Filler",
+          rarity: "common",
+          attack: 1000,
+          defense: 1000,
+          level: 4,
+        },
+      ]),
+      hostId: "player1",
+      awayId: "player2",
+      hostDeck: Array(40).fill("filler"),
+      awayDeck: Array(40).fill("filler"),
+      seed: 42,
+    });
+
+    const state = engine.getState();
+    state.currentPhase = "main";
+    state.hostBoard = [
+      {
+        cardId: "boost-monster",
+        definitionId: "boost-monster",
+        position: "attack",
+        faceDown: false,
+        canAttack: true,
+        hasAttackedThisTurn: false,
+        changedPositionThisTurn: false,
+        viceCounters: 0,
+        temporaryBoosts: { attack: 0, defense: 0 },
+        equippedCards: [],
+        turnSummoned: 1,
+      },
+    ];
+
+    const applyEvents = engine.decide(
+      { type: "ACTIVATE_EFFECT", cardId: "boost-monster", effectIndex: 0 },
+      "host"
+    );
+    engine.evolve(applyEvents);
+
+    const afterApply = engine.getState();
+    expect(afterApply.hostBoard[0].temporaryBoosts.attack).toBe(500);
+    expect(afterApply.temporaryModifiers).toHaveLength(1);
+
+    const endTurnEvents = engine.decide({ type: "END_TURN" }, "host");
+    expect(endTurnEvents).toContainEqual({
+      type: "MODIFIER_EXPIRED",
+      cardId: "boost-monster",
+      source: "boost-monster",
+    });
+
+    engine.evolve(endTurnEvents);
+    const afterEndTurn = engine.getState();
+    expect(afterEndTurn.hostBoard[0].temporaryBoosts.attack).toBe(0);
+    expect(afterEndTurn.temporaryModifiers).toHaveLength(0);
   });
 });

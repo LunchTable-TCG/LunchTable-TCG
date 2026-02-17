@@ -9,7 +9,7 @@ import { decideSummon, decideSetMonster, decideFlipSummon, evolveSummon } from "
 import { decideSetSpellTrap, decideActivateSpell, decideActivateTrap, evolveSpellTrap } from "./rules/spellsTraps.js";
 import { decideDeclareAttack, evolveCombat } from "./rules/combat.js";
 import { evolveVice } from "./rules/vice.js";
-import { drawCard } from "./rules/stateBasedActions.js";
+import { checkStateBasedActions, drawCard } from "./rules/stateBasedActions.js";
 import { decideChainResponse } from "./rules/chain.js";
 import { resolveEffectActions, canActivateEffect, detectTriggerEffects } from "./rules/effects.js";
 import { expectDefined } from "./internal/invariant.js";
@@ -448,6 +448,17 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
 
     case "END_TURN": {
       events.push({ type: "TURN_ENDED", seat });
+      const expiredKeys = new Set<string>();
+      for (const modifier of state.temporaryModifiers.filter((m) => m.expiresAt === "end_of_turn")) {
+        const key = `${modifier.cardId}|${modifier.source}`;
+        if (expiredKeys.has(key)) continue;
+        expiredKeys.add(key);
+        events.push({
+          type: "MODIFIER_EXPIRED",
+          cardId: modifier.cardId,
+          source: modifier.source,
+        });
+      }
       const nextSeat = opponentSeat(seat);
       events.push({ type: "TURN_STARTED", seat: nextSeat, turnNumber: state.turnNumber + 1 });
       break;
@@ -506,17 +517,25 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
 
       // Find the card on the player's board
       const playerBoard = seat === "host" ? state.hostBoard : state.awayBoard;
-      const boardCard = playerBoard.find((c) => c.cardId === cardId);
-      if (!boardCard) break;
+      const boardCard = expectDefined(
+        playerBoard.find((c) => c.cardId === cardId),
+        `engine.decide ACTIVATE_EFFECT missing board card ${cardId}`
+      );
       if (boardCard.faceDown) break;
 
       // Get card definition
-      const cardDef = state.cardLookup[cardId];
-      if (!cardDef || !cardDef.effects || effectIndex < 0 || effectIndex >= cardDef.effects.length) break;
+      const cardDef = expectDefined(
+        state.cardLookup[boardCard.definitionId],
+        `engine.decide ACTIVATE_EFFECT missing definition for board card ${boardCard.definitionId}`
+      );
+      const effects = expectDefined(
+        cardDef.effects,
+        `engine.decide ACTIVATE_EFFECT missing effects for card ${boardCard.definitionId}`
+      );
 
       const effectDef = expectDefined(
-        cardDef.effects[effectIndex],
-        "engine.decide ACTIVATE_EFFECT missing effect after bounds check"
+        effects[effectIndex],
+        `engine.decide ACTIVATE_EFFECT missing effect at index ${effectIndex} for card ${boardCard.definitionId}`
       );
       if (effectDef.type !== "ignition") break;
 
@@ -663,7 +682,7 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
       }
 
       case "MODIFIER_APPLIED": {
-        const { cardId, field, amount } = event;
+        const { cardId, field, amount, source, duration } = event;
         for (const boardKey of ["hostBoard", "awayBoard"] as const) {
           const idx = newState[boardKey].findIndex((c) => c.cardId === cardId);
           if (idx > -1) {
@@ -679,18 +698,136 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
             break;
           }
         }
+        if (duration === "turn") {
+          newState.temporaryModifiers = [
+            ...newState.temporaryModifiers,
+            { cardId, field, amount, source, expiresAt: "end_of_turn" },
+          ];
+        } else if (!duration || duration === "permanent") {
+          newState.temporaryModifiers = [
+            ...newState.temporaryModifiers,
+            { cardId, field, amount, source, expiresAt: "permanent" },
+          ];
+        }
+        break;
+      }
+
+      case "MODIFIER_EXPIRED": {
+        const { cardId, source } = event;
+        const matchedModifiers = newState.temporaryModifiers.filter(
+          (modifier) => modifier.cardId === cardId && modifier.source === source
+        );
+        if (matchedModifiers.length === 0) break;
+
+        for (const boardKey of ["hostBoard", "awayBoard"] as const) {
+          const board = [...newState[boardKey]];
+          const idx = board.findIndex((c) => c.cardId === cardId);
+          if (idx === -1) continue;
+
+          const existingCard = expectDefined(
+            board[idx],
+            `engine.evolve MODIFIER_EXPIRED missing board card at index ${idx}`
+          );
+          const updatedCard = { ...existingCard, temporaryBoosts: { ...existingCard.temporaryBoosts } };
+
+          for (const modifier of matchedModifiers) {
+            if (modifier.field === "attack") {
+              updatedCard.temporaryBoosts.attack -= modifier.amount;
+            } else {
+              updatedCard.temporaryBoosts.defense -= modifier.amount;
+            }
+          }
+
+          board[idx] = updatedCard;
+          newState[boardKey] = board;
+          break;
+        }
+
+        newState.temporaryModifiers = newState.temporaryModifiers.filter(
+          (modifier) => !(modifier.cardId === cardId && modifier.source === source)
+        );
         break;
       }
 
       case "CARD_BANISHED": {
-        const { cardId } = event;
-        for (const [boardKey, banishedKey] of [["hostBoard", "hostBanished"], ["awayBoard", "awayBanished"]] as const) {
-          const idx = (newState as any)[boardKey].findIndex((c: any) => c.cardId === cardId);
-          if (idx > -1) {
-            (newState as any)[boardKey] = [...(newState as any)[boardKey]];
-            (newState as any)[boardKey].splice(idx, 1);
-            (newState as any)[banishedKey] = [...(newState as any)[banishedKey], cardId];
+        const { cardId, from } = event;
+        if (from === "board") {
+          for (const [boardKey, banishedKey] of [
+            ["hostBoard", "hostBanished"] as const,
+            ["awayBoard", "awayBanished"] as const,
+          ]) {
+            const board = [...newState[boardKey]];
+            const idx = board.findIndex((c) => c.cardId === cardId);
+            if (idx > -1) {
+              const banished = expectDefined(
+                newState[banishedKey],
+                `engine.evolve CARD_BANISHED missing banished zone ${banishedKey}`
+              );
+              board.splice(idx, 1);
+              newState[boardKey] = board;
+              newState[banishedKey] = [...banished, cardId];
+              break;
+            }
+          }
+          break;
+        }
+
+        if (from === "hand") {
+          const hostIdx = newState.hostHand.indexOf(cardId);
+          if (hostIdx > -1) {
+            const hand = [...newState.hostHand];
+            hand.splice(hostIdx, 1);
+            newState.hostHand = hand;
+            newState.hostBanished = [...newState.hostBanished, cardId];
             break;
+          }
+
+          const awayIdx = newState.awayHand.indexOf(cardId);
+          if (awayIdx > -1) {
+            const hand = [...newState.awayHand];
+            hand.splice(awayIdx, 1);
+            newState.awayHand = hand;
+            newState.awayBanished = [...newState.awayBanished, cardId];
+          }
+          break;
+        }
+
+        if (from === "spellTrapZone" || from === "spell_trap_zone") {
+          const hostIdx = newState.hostSpellTrapZone.findIndex((c) => c.cardId === cardId);
+          if (hostIdx > -1) {
+            const spellTrapZone = [...newState.hostSpellTrapZone];
+            spellTrapZone.splice(hostIdx, 1);
+            newState.hostSpellTrapZone = spellTrapZone;
+            newState.hostBanished = [...newState.hostBanished, cardId];
+            break;
+          }
+
+          const awayIdx = newState.awaySpellTrapZone.findIndex((c) => c.cardId === cardId);
+          if (awayIdx > -1) {
+            const spellTrapZone = [...newState.awaySpellTrapZone];
+            spellTrapZone.splice(awayIdx, 1);
+            newState.awaySpellTrapZone = spellTrapZone;
+            newState.awayBanished = [...newState.awayBanished, cardId];
+          }
+          break;
+        }
+
+        if (from === "graveyard") {
+          const hostIdx = newState.hostGraveyard.indexOf(cardId);
+          if (hostIdx > -1) {
+            const graveyard = [...newState.hostGraveyard];
+            graveyard.splice(hostIdx, 1);
+            newState.hostGraveyard = graveyard;
+            newState.hostBanished = [...newState.hostBanished, cardId];
+            break;
+          }
+
+          const awayIdx = newState.awayGraveyard.indexOf(cardId);
+          if (awayIdx > -1) {
+            const graveyard = [...newState.awayGraveyard];
+            graveyard.splice(awayIdx, 1);
+            newState.awayGraveyard = graveyard;
+            newState.awayBanished = [...newState.awayBanished, cardId];
           }
         }
         break;
@@ -698,13 +835,87 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
       case "CARD_RETURNED_TO_HAND": {
         const { cardId } = event;
-        for (const [boardKey, handKey] of [["hostBoard", "hostHand"], ["awayBoard", "awayHand"]] as const) {
-          const idx = (newState as any)[boardKey].findIndex((c: any) => c.cardId === cardId);
-          if (idx > -1) {
-            (newState as any)[boardKey] = [...(newState as any)[boardKey]];
-            (newState as any)[boardKey].splice(idx, 1);
-            (newState as any)[handKey] = [...(newState as any)[handKey], cardId];
+
+        if (event.from === "board") {
+          const hostIdx = newState.hostBoard.findIndex((c) => c.cardId === cardId);
+          if (hostIdx > -1) {
+            const hostBoard = [...newState.hostBoard];
+            hostBoard.splice(hostIdx, 1);
+            newState.hostBoard = hostBoard;
+            const hand = [...newState.hostHand];
+            newState.hostHand = [...hand, cardId];
             break;
+          }
+
+          const awayIdx = newState.awayBoard.findIndex((c) => c.cardId === cardId);
+          if (awayIdx > -1) {
+            const awayBoard = [...newState.awayBoard];
+            awayBoard.splice(awayIdx, 1);
+            newState.awayBoard = awayBoard;
+            const hand = [...newState.awayHand];
+            newState.awayHand = [...hand, cardId];
+          }
+          break;
+        }
+
+        if (event.from === "spellTrapZone") {
+          const hostIdx = newState.hostSpellTrapZone.findIndex((c) => c.cardId === cardId);
+          if (hostIdx > -1) {
+            const spellTrapZone = [...newState.hostSpellTrapZone];
+            spellTrapZone.splice(hostIdx, 1);
+            newState.hostSpellTrapZone = spellTrapZone;
+            const hand = [...newState.hostHand];
+            newState.hostHand = [...hand, cardId];
+            break;
+          }
+
+          const awayIdx = newState.awaySpellTrapZone.findIndex((c) => c.cardId === cardId);
+          if (awayIdx > -1) {
+            const spellTrapZone = [...newState.awaySpellTrapZone];
+            spellTrapZone.splice(awayIdx, 1);
+            newState.awaySpellTrapZone = spellTrapZone;
+            const hand = [...newState.awayHand];
+            newState.awayHand = [...hand, cardId];
+          }
+          break;
+        }
+
+        if (event.from === "hand") {
+          const hostIdx = newState.hostHand.indexOf(cardId);
+          if (hostIdx > -1) {
+            const hand = [...newState.hostHand];
+            hand.splice(hostIdx, 1);
+            newState.hostHand = [...hand, cardId];
+            break;
+          }
+
+          const awayIdx = newState.awayHand.indexOf(cardId);
+          if (awayIdx > -1) {
+            const hand = [...newState.awayHand];
+            hand.splice(awayIdx, 1);
+            newState.awayHand = [...hand, cardId];
+          }
+          break;
+        }
+
+        if (event.from === "graveyard") {
+          const hostIdx = newState.hostGraveyard.indexOf(cardId);
+          if (hostIdx > -1) {
+            const graveyard = [...newState.hostGraveyard];
+            graveyard.splice(hostIdx, 1);
+            newState.hostGraveyard = graveyard;
+            const hand = [...newState.hostHand];
+            newState.hostHand = [...hand, cardId];
+            break;
+          }
+
+          const awayIdx = newState.awayGraveyard.indexOf(cardId);
+          if (awayIdx > -1) {
+            const graveyard = [...newState.awayGraveyard];
+            graveyard.splice(awayIdx, 1);
+            newState.awayGraveyard = graveyard;
+            const hand = [...newState.awayHand];
+            newState.awayHand = [...hand, cardId];
           }
         }
         break;
@@ -715,10 +926,10 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
         const isHost = seat === "host";
         const board = isHost ? [...newState.hostBoard] : [...newState.awayBoard];
         const gyKey = isHost ? "hostGraveyard" : "awayGraveyard";
-        const gy = [...(newState as any)[gyKey]];
+        const gy = [...expectDefined(newState[gyKey], `engine.evolve SPECIAL_SUMMONED missing graveyard ${gyKey}`)];
         const gyIdx = gy.indexOf(cardId);
         if (gyIdx > -1) gy.splice(gyIdx, 1);
-        (newState as any)[gyKey] = gy;
+        newState[gyKey] = gy;
 
         const newCard: BoardCard = {
           cardId, definitionId: cardId, position, faceDown: false,
@@ -766,9 +977,18 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
       case "EFFECT_ACTIVATED": {
         const { effectIndex, cardId } = event;
-        const cardDef = newState.cardLookup[cardId];
-        const eff = cardDef?.effects?.[effectIndex];
-        if (!eff) break;
+        const cardDef = expectDefined(
+          newState.cardLookup[cardId],
+          `engine.evolve EFFECT_ACTIVATED missing card definition for ${cardId}`
+        );
+        const effects = expectDefined(
+          cardDef.effects,
+          `engine.evolve EFFECT_ACTIVATED card ${cardId} missing effects`
+        );
+        const eff = expectDefined(
+          effects[effectIndex],
+          `engine.evolve EFFECT_ACTIVATED missing effect at index ${effectIndex} for card ${cardId}`
+        );
 
         if (eff.oncePerTurn) {
           newState.optUsedThisTurn = [...newState.optUsedThisTurn, eff.id];
@@ -780,7 +1000,7 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
       }
 
       case "POSITION_CHANGED": {
-        const { cardId, to } = event as any;
+        const { cardId, to } = event;
         for (const boardKey of ["hostBoard", "awayBoard"] as const) {
           const board = [...newState[boardKey]];
           const idx = board.findIndex((c) => c.cardId === cardId);
@@ -789,7 +1009,11 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
               board[idx],
               `engine.evolve POSITION_CHANGED missing board card at index ${idx}`
             );
-            board[idx] = { ...existingCard, position: to, changedPositionThisTurn: true };
+            board[idx] = {
+              ...existingCard,
+              position: to,
+              changedPositionThisTurn: true,
+            };
             newState[boardKey] = board;
             break;
           }
@@ -815,14 +1039,9 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
   // State-based check: LP reaching 0 ends the game
   if (!newState.gameOver) {
-    if (newState.hostLifePoints <= 0) {
-      newState.gameOver = true;
-      newState.winner = "away";
-      newState.winReason = "lp_zero";
-    } else if (newState.awayLifePoints <= 0) {
-      newState.gameOver = true;
-      newState.winner = "host";
-      newState.winReason = "lp_zero";
+    const stateBasedEvents = checkStateBasedActions(newState);
+    if (stateBasedEvents.length > 0) {
+      newState = evolve(newState, stateBasedEvents);
     }
   }
 

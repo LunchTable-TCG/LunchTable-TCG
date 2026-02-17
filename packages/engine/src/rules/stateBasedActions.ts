@@ -1,4 +1,5 @@
 import type { GameState, EngineEvent, Seat } from "../types/index.js";
+import { checkBreakdowns } from "./vice.js";
 import { expectDefined } from "../internal/invariant.js";
 
 export function checkStateBasedActions(state: GameState): EngineEvent[] {
@@ -52,6 +53,11 @@ export function checkStateBasedActions(state: GameState): EngineEvent[] {
       reason: "breakdown",
     });
     return events;
+  }
+
+  // 3b. During breakdown check phase, destroy monsters at/above vice threshold
+  if (state.currentPhase === "breakdown_check") {
+    events.push(...checkBreakdowns(state));
   }
 
   // 4. Hand size limit — if it's end phase and current player has > maxHandSize cards,

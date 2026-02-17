@@ -363,7 +363,7 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
         }
       }
       // Handle spell/trap zone cards
-      else if (from === "spellTrapZone") {
+      else if (from === "spellTrapZone" || from === "spell_trap_zone") {
         const hostIndex = newState.hostSpellTrapZone.findIndex((c) => c.cardId === cardId);
         if (hostIndex > -1) {
           newState.hostSpellTrapZone = [...newState.hostSpellTrapZone];

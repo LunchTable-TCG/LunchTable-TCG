@@ -27,7 +27,14 @@ export type EngineEvent =
   | { type: "VICE_COUNTER_REMOVED"; cardId: string; newCount: number }
   | { type: "BREAKDOWN_TRIGGERED"; seat: Seat; cardId: string }
   | { type: "POSITION_CHANGED"; cardId: string; from: Position; to: Position }
-  | { type: "MODIFIER_APPLIED"; cardId: string; field: "attack" | "defense"; amount: number; source: string }
+  | {
+      type: "MODIFIER_APPLIED";
+      cardId: string;
+      field: "attack" | "defense";
+      amount: number;
+      source: string;
+      duration?: "turn" | "permanent";
+    }
   | { type: "MODIFIER_EXPIRED"; cardId: string; source: string }
   | { type: "CHAIN_STARTED" }
   | { type: "CHAIN_LINK_ADDED"; cardId: string; seat: Seat; effectIndex: number; targets?: string[] }
