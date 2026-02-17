@@ -46,6 +46,30 @@ const lookup = {
       actions: [{ type: "damage" as const, amount: 500, target: "opponent" as const }],
     }],
   },
+  "trap3": {
+    id: "trap3",
+    name: "Choice Trap",
+    type: "trap" as const,
+    trapType: "normal" as const,
+    rarity: "common" as const,
+    archetype: "dropouts",
+    description: "Multi effect trap",
+    effects: [
+      {
+        id: "trap3_effect_a",
+        type: "trigger" as const,
+        description: "Destroy target",
+        targetCount: 1,
+        actions: [{ type: "destroy" as const, target: "selected" as const }],
+      },
+      {
+        id: "trap3_effect_b",
+        type: "trigger" as const,
+        description: "Deal damage",
+        actions: [{ type: "damage" as const, amount: 300, target: "opponent" as const }],
+      },
+    ],
+  },
 };
 
 function makeState(overrides: Partial<GameState> = {}): GameState {
@@ -70,7 +94,7 @@ describe("chain system", () => {
     expect(events.some(e => e.type === "CHAIN_PASSED")).toBe(true);
   });
 
-  it("CHAIN_RESPONSE with pass resolves chain when links exist", () => {
+  it("CHAIN_RESPONSE first pass does not resolve chain", () => {
     const state = makeState({
       currentPhase: "main",
       currentChain: [{
@@ -81,6 +105,22 @@ describe("chain system", () => {
       }],
     });
     const events = decide(state, { type: "CHAIN_RESPONSE", pass: true }, "away");
+    expect(events.some(e => e.type === "CHAIN_RESOLVED")).toBe(false);
+  });
+
+  it("CHAIN_RESPONSE resolves chain on opposite-seat second pass", () => {
+    const state = makeState({
+      currentPhase: "main",
+      currentChain: [{
+        cardId: "trap1",
+        effectIndex: 0,
+        activatingPlayer: "host",
+        targets: ["target1"],
+      }],
+      currentChainPasser: "host",
+    });
+    const events = decide(state, { type: "CHAIN_RESPONSE", pass: true }, "away");
+    expect(events.some(e => e.type === "CHAIN_PASSED")).toBe(true);
     expect(events.some(e => e.type === "CHAIN_RESOLVED")).toBe(true);
   });
 
@@ -91,6 +131,62 @@ describe("chain system", () => {
     const events = decide(state, { type: "CHAIN_RESPONSE", cardId: "trap1_instance", pass: false }, "host");
     expect(events.some(e => e.type === "CHAIN_LINK_ADDED")).toBe(true);
     expect(events.some(e => e.type === "TRAP_ACTIVATED")).toBe(true);
+  });
+
+  it("supports CHAIN_RESPONSE with effectIndex and targets", () => {
+    let state = makeState({ currentPhase: "main" });
+    state = setTrapInZone(state, "host", "trap3_instance", "trap3");
+
+    const events = decide(state, {
+      type: "CHAIN_RESPONSE",
+      cardId: "trap3_instance",
+      pass: false,
+      effectIndex: 1,
+      targets: ["targetA", "targetB"],
+    }, "host");
+
+    const chainLink = events.find((event) => event.type === "CHAIN_LINK_ADDED");
+    expect(chainLink).toBeDefined();
+    if (chainLink?.type === "CHAIN_LINK_ADDED") {
+      expect(chainLink.effectIndex).toBe(1);
+      expect(chainLink.targets).toEqual(["targetA", "targetB"]);
+    }
+  });
+
+  it("supports legacy CHAIN_RESPONSE sourceCardId alias", () => {
+    let state = makeState({ currentPhase: "main" });
+    state = setTrapInZone(state, "host", "trap3_instance", "trap3");
+
+    const events = decide(state, {
+      type: "CHAIN_RESPONSE",
+      pass: false,
+      sourceCardId: "trap3_instance",
+      effectIndex: 1,
+    }, "host");
+
+    const chainLink = events.find((event) => event.type === "CHAIN_LINK_ADDED");
+    expect(chainLink).toBeDefined();
+    if (chainLink?.type === "CHAIN_LINK_ADDED") {
+      expect(chainLink.cardId).toBe("trap3_instance");
+    }
+  });
+
+  it("supports CHAIN_RESPONSE chainLink alias as effect selection", () => {
+    let state = makeState({ currentPhase: "main" });
+    state = setTrapInZone(state, "host", "trap3_instance", "trap3");
+
+    const events = decide(state, {
+      type: "CHAIN_RESPONSE",
+      cardId: "trap3_instance",
+      pass: false,
+      chainLink: 1,
+    }, "host");
+
+    const chainLink = events.find((event) => event.type === "CHAIN_LINK_ADDED");
+    expect(chainLink).toBeDefined();
+    if (chainLink?.type === "CHAIN_LINK_ADDED") {
+      expect(chainLink.effectIndex).toBe(1);
+    }
   });
 
   it("evolve CHAIN_LINK_ADDED adds to currentChain and switches priority", () => {
@@ -129,6 +225,7 @@ describe("chain system", () => {
         { cardId: "trap1", effectIndex: 0, activatingPlayer: "host", targets: ["target_from_trap1"] },
         { cardId: "trap2", effectIndex: 0, activatingPlayer: "away", targets: [] },
       ],
+      currentChainPasser: "away",
     });
     const events = decide(state, { type: "CHAIN_RESPONSE", pass: true }, "host");
 
@@ -148,6 +245,22 @@ describe("chain system", () => {
     }
   });
 
+  it("CHAIN_RESPONSE with invalid effect index yields no events", () => {
+    let state = makeState({ currentPhase: "main" });
+    state = setTrapInZone(state, "host", "trap3_instance", "trap3");
+
+    const events = decide(
+      {
+        type: "CHAIN_RESPONSE",
+        cardId: "trap3_instance",
+        pass: false,
+        effectIndex: 2,
+      },
+      "host",
+    );
+    expect(events).toEqual([]);
+  });
+
   it("CHAIN_RESPONSE returns empty events for invalid cardId", () => {
     const state = makeState({ currentPhase: "main" });
     const events = decide(state, { type: "CHAIN_RESPONSE", cardId: "nonexistent", pass: false }, "host");
@@ -163,13 +276,16 @@ describe("chain system", () => {
     expect(events).toEqual([]);
   });
 
-  it("evolve CHAIN_PASSED does not modify state", () => {
-    const state = makeState({ currentPhase: "main" });
-    const stateBefore = { ...state };
+  it("evolve CHAIN_PASSED records chain passer and switches priority", () => {
+    const state = makeState({
+      currentPhase: "main",
+      currentChain: [{ cardId: "trap1", effectIndex: 0, activatingPlayer: "host", targets: ["t"] }],
+      currentPriorityPlayer: "host",
+    });
     const stateAfter = evolve(state, [{ type: "CHAIN_PASSED", seat: "host" }]);
 
-    // State should be identical except for object reference
-    expect(stateAfter.currentChain).toEqual(stateBefore.currentChain);
-    expect(stateAfter.currentPriorityPlayer).toEqual(stateBefore.currentPriorityPlayer);
+    expect(stateAfter.currentChain).toEqual(state.currentChain);
+    expect(stateAfter.currentChainPasser).toBe("host");
+    expect(stateAfter.currentPriorityPlayer).toBe("away");
   });
 });

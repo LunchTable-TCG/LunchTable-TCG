@@ -227,6 +227,8 @@ export interface PlayerView {
   opponentDeckCount?: number;
   opponentBreakdownsCaused?: number;
   currentChain?: unknown[];
+  currentPriorityPlayer?: "host" | "away" | null;
+  currentChainPasser?: "host" | "away" | null;
   mySeat?: "host" | "away";
   opponentHandCount?: number;
   opponentBoard: BoardCard[];
@@ -343,5 +345,13 @@ export type GameCommand =
       newPosition: string;
     }
   | { type: "FLIP_SUMMON"; cardId: string }
-  | { type: "CHAIN_RESPONSE"; pass: boolean; cardId?: string }
+  | {
+      type: "CHAIN_RESPONSE";
+      pass: boolean;
+      cardId?: string;
+      sourceCardId?: string;
+      effectIndex?: number;
+      chainLink?: number;
+      targets?: string[];
+    }
   | { type: "SURRENDER" };

@@ -81,16 +81,27 @@ export async function playOneTurn(
   };
 
   const clearChain = async (): Promise<void> => {
-    for (let i = 0; i < 8; i += 1) {
-      if (!Array.isArray(currentView.value.currentChain) ||
-        currentView.value.currentChain.length === 0) {
-        break;
-      }
-      const passed = await submitAction(
+    let attempts = 0;
+    let previousSignature = chainStateSignature(currentView.value);
+
+    while (
+      Array.isArray(currentView.value.currentChain) &&
+      currentView.value.currentChain.length > 0
+    ) {
+      attempts += 1;
+      if (attempts > 20) break;
+
+      await submitAction(
         { type: "CHAIN_RESPONSE", pass: true },
         "Passed chain response",
       );
-      if (!passed) break;
+      await refreshView();
+
+      const nextSignature = chainStateSignature(currentView.value);
+      if (nextSignature === previousSignature) {
+        break;
+      }
+      previousSignature = nextSignature;
     }
   };
 
@@ -401,6 +412,23 @@ function resolveLifePoints(
 
 function dedupe(items: string[]): string[] {
   return Array.from(new Set(items));
+}
+
+function chainStateSignature(state: PlayerView): string {
+  const chain = Array.isArray(state.currentChain) ? state.currentChain : [];
+  const chainSnapshot = chain.map((link, index) => {
+    if (!link || typeof link !== "object") {
+      return `${index}:null`;
+    }
+    const entry = link as Record<string, unknown>;
+    const cardId = typeof entry.cardId === "string" ? entry.cardId : "";
+    const effectIndex = typeof entry.effectIndex === "number" ? entry.effectIndex : 0;
+    const by = typeof entry.activatingPlayer === "string" ? entry.activatingPlayer : "";
+    return `${index}:${cardId}:${effectIndex}:${by}`;
+  });
+  const priority = state.currentPriorityPlayer ?? "null";
+  const passer = state.currentChainPasser ?? "null";
+  return `${chain.length}|${priority}|${passer}|${chainSnapshot.join(";")}`;
 }
 
 function boardStateSignature(cards: BoardCardLike[]): string {
