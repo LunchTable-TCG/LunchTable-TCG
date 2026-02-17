@@ -66,6 +66,28 @@ describe("ADVANCE_PHASE", () => {
     // After "end", should wrap back to "draw"
     expect(engine.getState().currentPhase).toBe("draw");
   });
+
+  it("maps ADVANCE_PHASE from end phase to end turn", () => {
+    const engine = createEngine({
+      cardLookup,
+      hostId: "player1",
+      awayId: "player2",
+      hostDeck: createTestDeck(40),
+      awayDeck: createTestDeck(40),
+    });
+
+    engine.getState().currentPhase = "end";
+
+    const events = engine.decide({ type: "ADVANCE_PHASE" }, "host");
+    expect(events).toHaveLength(2);
+    expect(events[0].type).toBe("TURN_ENDED");
+    expect(events[1].type).toBe("TURN_STARTED");
+    expect(events[1]).toMatchObject({ seat: "away", turnNumber: 2 });
+
+    engine.evolve(events);
+    expect(engine.getState().currentTurnPlayer).toBe("away");
+    expect(engine.getState().currentPhase).toBe("draw");
+  });
 });
 
 describe("END_TURN", () => {
