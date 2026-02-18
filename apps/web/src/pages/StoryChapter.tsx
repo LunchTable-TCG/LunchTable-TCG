@@ -167,9 +167,14 @@ function StoryChapterInner() {
 
   const handleCopyAgentMatch = async () => {
     if (!agentMatch?.matchId) return;
-    await navigator.clipboard.writeText(agentMatch.matchId);
-    setCopyMessage("Match ID copied.");
-    setTimeout(() => setCopyMessage(""), 2200);
+    try {
+      await navigator.clipboard.writeText(agentMatch.matchId);
+      setCopyMessage("Match ID copied.");
+    } catch {
+      setCopyMessage("Clipboard unavailable. Copy manually.");
+    } finally {
+      setTimeout(() => setCopyMessage(""), 2200);
+    }
   };
 
   const handleCancelAgentMatch = async () => {

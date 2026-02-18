@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import type { MouseEvent } from "react";
 import { useStory, type Stage } from "./StoryProvider";
 
 import {
@@ -41,11 +42,13 @@ export function StagePanel({
   onHostAgentFight,
   chapterId,
   locked = false,
+  onHostAgentFight,
 }: {
   stage: Stage;
   isStarting: boolean;
   onFight: () => void;
   onHostAgentFight?: () => void;
+  locked?: boolean;
   chapterId?: string;
   locked?: boolean;
 }) {
@@ -60,26 +63,26 @@ export function StagePanel({
     ? `${chapter.actNumber}-${chapter.chapterNumber}-${stage.stageNumber}`
     : null;
   const bannerImage = bannerKey ? STAGE_BANNERS[bannerKey] : null;
-  const canFight = !isStarting && !locked;
-
-  const handlePrimaryAction = () => {
-    if (!canFight) return;
+  const disabled = isStarting || locked;
+  const handleFight = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    if (onHostAgentFight && (event.metaKey || event.shiftKey)) {
+      onHostAgentFight();
+      return;
+    }
     onFight();
   };
 
-  const handleHostAction = () => {
-    if (!canFight || !onHostAgentFight) return;
-    onHostAgentFight();
-  };
-
   return (
-    <motion.article
-      onClick={handlePrimaryAction}
+    <motion.button
+      type="button"
+      onClick={handleFight}
+      disabled={disabled}
       className={`comic-panel relative overflow-hidden text-left group w-full h-full ${
         completed ? "opacity-75" : ""
-      } ${isStarting ? "cursor-wait" : locked ? "cursor-not-allowed" : "cursor-pointer"}`}
+      } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       variants={panelVariant}
-      whileHover={canFight ? { scale: 1.02, zIndex: 10 } : undefined}
+      whileHover={disabled ? undefined : { scale: 1.02, zIndex: 10 }}
       whileTap={{ scale: 0.97 }}
     >
       {locked && (
@@ -187,7 +190,17 @@ export function StagePanel({
           <span
             className="text-[10px] text-[#ffcc00] font-bold uppercase tracking-wider mt-2 animate-pulse"
           >
-            {isStarting ? "Loading..." : "Click to fight"}
+            {isStarting ? "Loading..." : locked ? "Locked" : "Click to fight"}
+          </span>
+        )}
+
+        {/* Optional locked overlay */}
+        {locked && !completed && (
+          <span
+            className="absolute top-3 left-3 text-[9px] tracking-wider font-black uppercase text-white/80 bg-black/70 border border-white/40 px-2 py-1 z-20"
+            style={{ fontFamily: "Special Elite, cursive" }}
+          >
+            Unavailable
           </span>
         )}
 

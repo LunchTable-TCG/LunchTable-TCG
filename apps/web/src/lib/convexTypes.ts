@@ -4,16 +4,6 @@ export type ClientPlatform = "web" | "telegram_inline" | "telegram_miniapp" | "a
 export type MatchMode = "pvp" | "story";
 export type MatchStatus = "waiting" | "active" | "ended";
 
-export type MatchPlatformPresence = {
-  matchId: string;
-  hostUserId: string;
-  awayUserId: string | null;
-  hostPlatform: ClientPlatform;
-  awayPlatform: ClientPlatform | null;
-  hostLastActiveAt: number;
-  awayLastActiveAt: number | null;
-};
-
 export const cliqueAssignmentStatuses = {
   assigned: "assigned",
   alreadyAssigned: "already_assigned",
@@ -158,9 +148,6 @@ export type PlayerView = {
   mySeat: Seat;
   currentPhase: "draw" | "standby" | "breakdown_check" | "main" | "main2" | "combat" | "end";
   currentPriorityPlayer: Seat | null;
-  normalSummonedThisTurn: boolean;
-  maxBoardSlots: number;
-  maxSpellTrapSlots: number;
   gameOver: boolean;
   turnNumber: number;
   board: GameCardInstance[];
