@@ -37,6 +37,7 @@ export const trackEvent = action({
         distinctId: v.string(),
         properties: v.optional(v.any()),
     },
+    returns: v.null(),
     handler: async (_ctx, args) => {
         ensureEnv();
         if (posthog) {
@@ -47,6 +48,7 @@ export const trackEvent = action({
             });
             await posthog.shutdown(); // Ensure events are flushed
         }
+        return null;
     },
 });
 
@@ -55,11 +57,13 @@ export const reportError = action({
         message: v.string(),
         context: v.optional(v.any()),
     },
+    returns: v.null(),
     handler: async (_ctx, args) => {
         ensureEnv();
         Sentry.captureException(new Error(args.message), {
             extra: args.context,
         });
         await Sentry.flush(2000);
+        return null;
     },
 });

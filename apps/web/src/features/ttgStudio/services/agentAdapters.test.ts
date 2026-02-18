@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createDraftFromWorld, playableWorlds } from "@/lib/ttrpgStudio";
+import { createDraftFromWorld, playableWorlds } from "../../../lib/ttrpgStudio";
 import { createAgentAdapter, SimulatedAgentAdapter } from "./agentAdapters";
 
 describe("agentAdapters", () => {
   it("generates deterministic simulated turns for identical seeds", async () => {
-    const draft = createDraftFromWorld(playableWorlds[0].id);
+    const firstWorld = playableWorlds[0];
+    if (!firstWorld) {
+      throw new Error("No playable worlds available for test setup.");
+    }
+    const draft = createDraftFromWorld(firstWorld.id);
 
     const adapterA = new SimulatedAgentAdapter();
     const adapterB = new SimulatedAgentAdapter();

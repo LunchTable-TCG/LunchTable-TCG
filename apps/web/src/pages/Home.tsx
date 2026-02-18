@@ -170,7 +170,7 @@ export function Home() {
         <Panel
           title="LunchTable TTG"
           subtitle="Create worlds, agents, maps, and campaigns"
-          onClick={() => goTo("/studio", false)}
+          onClick={() => goTo("/studio?tab=overview", false)}
         >
           <div className="text-4xl mb-3">&#9881;</div>
         </Panel>

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
@@ -256,7 +256,7 @@ const assignUserToCliqueByArchetype = async (
   if (!clique) return null;
 
   const user = await ctx.db.get(userId);
-  if (!user) throw new Error("User not found");
+  if (!user) throw new ConvexError("User not found");
 
   if (user.cliqueId) {
     const existingClique = await ctx.db.get(user.cliqueId);
@@ -393,12 +393,12 @@ export const joinClique = mutation({
 
     const clique = await ctx.db.get(args.cliqueId);
     if (!clique) {
-      throw new Error("Clique not found");
+      throw new ConvexError("Clique not found");
     }
 
     const userArchetype = await resolveUserStarterArchetype(ctx, user);
     if (userArchetype && clique.archetype !== userArchetype) {
-      throw new Error(
+      throw new ConvexError(
         `Starter deck locked to ${userArchetype}. You can only join that clique.`,
       );
     }
@@ -409,24 +409,34 @@ export const joinClique = mutation({
 
 export const leaveClique = mutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
+    const cliqueId = user.cliqueId;
 
-    if (!user.cliqueId) {
-      throw new Error("Not in a clique");
+    if (!cliqueId) {
+      throw new ConvexError("Not in a clique");
     }
 
-    const clique = await ctx.db.get(user.cliqueId);
+    const clique = await ctx.db.get(cliqueId);
     if (!clique) {
-      throw new Error("Clique not found");
+      // Repair stale membership references idempotently.
+      await ctx.db.patch(user._id, {
+        cliqueId: undefined,
+        cliqueRole: undefined,
+      });
+      return null;
     }
+
+    let deletedClique = false;
 
     // Leaders/founders can't leave if they're the only one
     if (user.cliqueRole === "founder" || user.cliqueRole === "leader") {
       if (clique.memberCount <= 1) {
-        await ctx.db.delete(user.cliqueId);
+        await ctx.db.delete(cliqueId);
+        deletedClique = true;
       } else {
-        throw new Error("Transfer leadership before leaving");
+        throw new ConvexError("Transfer leadership before leaving");
       }
     }
 
@@ -437,18 +447,22 @@ export const leaveClique = mutation({
     });
 
     // Update member count
-    await ctx.db.patch(user.cliqueId, {
-      memberCount: Math.max(0, clique.memberCount - 1),
-    });
+    if (!deletedClique) {
+      await ctx.db.patch(cliqueId, {
+        memberCount: Math.max(0, clique.memberCount - 1),
+      });
+    }
+    return null;
   },
 });
 
 export const seedCliques = internalMutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     // Check if already seeded
     const existing = await ctx.db.query("cliques").first();
-    if (existing) return;
+    if (existing) return null;
 
     for (const data of CLIQUE_DATA) {
       await ctx.db.insert("cliques", {
@@ -459,6 +473,7 @@ export const seedCliques = internalMutation({
         createdAt: Date.now(),
       });
     }
+    return null;
   },
 });
 

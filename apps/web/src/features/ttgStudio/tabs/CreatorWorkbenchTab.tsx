@@ -48,7 +48,7 @@ export function CreatorWorkbenchTab() {
   const [nameSeed, setNameSeed] = useState("Echo Vale");
   const [focus, setFocus] = useState("high-pressure tactical play");
   const [newMove, setNewMove] = useState("Flash Counter");
-  const [newGear, setNewGear] = useState("Emergency Signal")
+  const [newGear, setNewGear] = useState("Emergency Signal");
   const [generated, setGenerated] = useState<GeneratedCharacter | null>(null);
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export function CreatorWorkbenchTab() {
       genre: draft?.world.genre ?? "",
       tone: draft?.world.mood ?? "",
       themes: draft?.world.tagline ?? "",
-      factions: draft?.world.viralityHooks.join(", "),
+      factions: draft?.world.viralityHooks.join(", ") ?? "",
       tech_or_magic_level: draft?.world.rules.name ?? "",
       party_level: arc?.levelRange ?? "",
       party_size: draft?.world.recommendedPartySize ?? "",
@@ -125,8 +125,8 @@ export function CreatorWorkbenchTab() {
       archetype: archetype.title,
       pitch: `${archetype.fantasy} Tuned for ${focus}.`,
       signatureMove: archetype.startingMoves[seed % archetype.startingMoves.length] ?? "Adaptive stance",
-      flaw: FLAWS[seed % FLAWS.length],
-      goal: GOALS[(seed >> 3) % GOALS.length],
+      flaw: FLAWS[seed % FLAWS.length] ?? "pushes too far to prove a point",
+      goal: GOALS[(seed >> 3) % GOALS.length] ?? "secure leverage for crew survival",
       stats: nextStats,
     });
   };

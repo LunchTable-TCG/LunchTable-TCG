@@ -34,7 +34,9 @@ function buildDefaultMapTokens(archetypeNames: string[]): TTGMapToken[] {
     { x: 70, y: 32, layer: "air" as const, color: "#ff7f50" },
   ];
   return archetypeNames.slice(0, 6).map((name, index) => {
-    const baseline = defaults[index % defaults.length];
+    const baseline =
+      defaults[index % defaults.length] ??
+      { x: 20, y: 24, layer: "ground" as const, color: "#ffcc00" };
     return {
       id: makeId("token"),
       name,

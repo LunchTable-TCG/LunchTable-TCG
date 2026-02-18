@@ -13,6 +13,7 @@
     "dev": "concurrently -n convex,web -c blue,magenta \"bun run dev:convex\" \"bun run dev:web\"",
     "dev:convex": "convex dev",
     "dev:web": "cd apps/web && bun run dev",
+    "lint": "bunx tsc --noEmit --project convex/tsconfig.json && (cd apps/web && bun run type-check)",
     "test": "vitest",
     "test:once": "vitest run"
   },

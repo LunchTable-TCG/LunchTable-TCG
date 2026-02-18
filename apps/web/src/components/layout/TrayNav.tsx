@@ -10,7 +10,7 @@ const textLinks: Array<
 > = [
   { label: "Cliques", path: "/cliques", auth: true },
   { label: "Agent Dev", path: "/agent-dev", auth: true },
-  { label: "LunchTable TTG", path: "/studio", auth: false },
+  { label: "LunchTable TTG", path: "/studio?tab=overview", auth: false },
   { label: "Leaderboard", path: "/leaderboard", auth: false },
   { label: "Profile", path: "/profile", auth: true },
   { label: "Settings", path: "/settings", auth: true },

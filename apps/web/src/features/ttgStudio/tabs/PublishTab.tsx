@@ -3,7 +3,7 @@ import { serializeDraft, validateDraft } from "@/lib/ttrpgStudio";
 import { useActiveProjectDraft, useTTGStudioStore } from "../state/useTTGStudioStore";
 
 const bumpVersion = (value: string, mode: "major" | "minor" | "patch") => {
-  const [a, b, c] = value.split(".").map((part) => Number(part || 0));
+  const [a = 0, b = 0, c = 0] = value.split(".").map((part) => Number(part || 0));
   if (mode === "major") return `${a + 1}.0.0`;
   if (mode === "minor") return `${a}.${b + 1}.0`;
   return `${a}.${b}.${c + 1}`;

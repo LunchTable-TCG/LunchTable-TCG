@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { playableWorlds } from "@/lib/ttrpgStudio";
+import { playableWorlds } from "../../../lib/ttrpgStudio";
 import { resetTTGStudioStoreForTests, useTTGStudioStore } from "./useTTGStudioStore";
 
 describe("useTTGStudioStore", () => {
@@ -33,7 +33,11 @@ describe("useTTGStudioStore", () => {
 
   it("creates drafts from world seeds and handles tab transitions", () => {
     const before = useTTGStudioStore.getState().projectOrder.length;
-    const worldId = playableWorlds[0].id;
+    const firstWorld = playableWorlds[0];
+    if (!firstWorld) {
+      throw new Error("No playable worlds available for test setup.");
+    }
+    const worldId = firstWorld.id;
     useTTGStudioStore.getState().createProjectFromWorld(worldId);
     const after = useTTGStudioStore.getState().projectOrder.length;
     expect(after).toBe(before + 1);
