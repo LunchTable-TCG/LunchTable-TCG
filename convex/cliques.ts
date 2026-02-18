@@ -331,31 +331,31 @@ export const getCliqueDashboard = query({
     const cliques = sortCliques(await ctx.db.query("cliques").collect());
 
     const myClique = user.cliqueId ? await ctx.db.get(user.cliqueId) : null;
-    const myArchetype = await resolveUserStarterArchetype(ctx, user);
+    const myArchetype = myClique?.archetype ?? (await resolveUserStarterArchetype(ctx, user));
 
-    const members = user.cliqueId
-      ? await ctx.db
-          .query("users")
-          .withIndex("by_clique", (q) => q.eq("cliqueId", user.cliqueId))
-          .collect()
+    const rosterPreview = user.cliqueId
+      ? (
+          await ctx.db
+            .query("users")
+            .withIndex("by_clique_and_username", (q) => q.eq("cliqueId", user.cliqueId))
+            .take(12)
+        ).map((member) => ({
+          _id: member._id,
+          _creationTime: member._creationTime,
+          username: member.username,
+          name: member.name,
+          cliqueRole: member.cliqueRole,
+          createdAt: member.createdAt,
+        }))
       : [];
-
-    members.sort((a, b) => (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""));
-
-    const rosterPreview = members.slice(0, 12).map((member) => ({
-      _id: member._id,
-      _creationTime: member._creationTime,
-      username: member.username,
-      name: member.name,
-      cliqueRole: member.cliqueRole,
-      createdAt: member.createdAt,
-    }));
 
     return {
       myArchetype,
       myClique,
       myCliqueMembers: rosterPreview,
-      myCliqueMemberOverflow: Math.max(0, members.length - rosterPreview.length),
+      myCliqueMemberOverflow: myClique
+        ? Math.max(0, myClique.memberCount - rosterPreview.length)
+        : 0,
       totalPlayers: cliques.reduce((sum, clique) => sum + clique.memberCount, 0),
       leaderboard: cliques.map((clique, index) => ({
         ...clique,
@@ -372,7 +372,7 @@ export const getCliqueMembers = query({
   handler: async (ctx, args) => {
     const members = await ctx.db
       .query("users")
-      .withIndex("by_clique", (q) => q.eq("cliqueId", args.cliqueId))
+      .withIndex("by_clique_and_username", (q) => q.eq("cliqueId", args.cliqueId))
       .collect();
     return members.map((m) => ({
       _id: m._id,

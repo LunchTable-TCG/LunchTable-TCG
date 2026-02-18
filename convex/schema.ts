@@ -19,7 +19,8 @@ export default defineSchema(
     })
       .index("by_privyId", ["privyId"])
       .index("by_username", ["username"])
-      .index("by_clique", ["cliqueId"]),
+      .index("by_clique", ["cliqueId"])
+      .index("by_clique_and_username", ["cliqueId", "username"]),
 
     agents: defineTable({
       name: v.string(),
@@ -51,6 +52,12 @@ export default defineSchema(
     })
       .index("by_matchId", ["matchId"])
       .index("by_userId", ["userId"]),
+
+    // Dedupe/lock rows for scheduled AI turns.
+    aiTurnQueue: defineTable({
+      matchId: v.string(),
+      createdAt: v.number(),
+    }).index("by_matchId", ["matchId"]),
 
     // Singleton — tracks current position in the 16-week campaign.
     // One row. Created by seed, advanced by cron.

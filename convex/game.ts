@@ -80,6 +80,86 @@ const resolveDefaultStarterDeckCode = () => {
   return keys[0] ?? null;
 };
 
+const CARD_LOOKUP_CACHE_TTL_MS = 60_000;
+const AI_TURN_QUEUE_DEDUPE_MS = 5_000;
+
+let cachedCardDefinitions: any[] | null = null;
+let cachedCardLookup: Record<string, any> | null = null;
+let cachedCardLookupAt = 0;
+
+async function getCachedCardDefinitions(ctx: any): Promise<any[]> {
+  const now = Date.now();
+  if (cachedCardDefinitions && now - cachedCardLookupAt < CARD_LOOKUP_CACHE_TTL_MS) {
+    return cachedCardDefinitions;
+  }
+
+  const allCards = await cards.cards.getAllCards(ctx);
+  const normalizedCards = Array.isArray(allCards) ? allCards : [];
+  const nextLookup: Record<string, any> = {};
+  for (const card of normalizedCards) {
+    if (card?._id) {
+      nextLookup[card._id] = card;
+    }
+  }
+
+  cachedCardDefinitions = normalizedCards;
+  cachedCardLookup = nextLookup;
+  cachedCardLookupAt = now;
+  return normalizedCards;
+}
+
+async function getCachedCardLookup(ctx: any): Promise<Record<string, any>> {
+  const now = Date.now();
+  if (cachedCardLookup && now - cachedCardLookupAt < CARD_LOOKUP_CACHE_TTL_MS) {
+    return cachedCardLookup;
+  }
+  await getCachedCardDefinitions(ctx);
+  return cachedCardLookup ?? {};
+}
+
+async function queueAITurn(ctx: any, matchId: string): Promise<boolean> {
+  const queuedRows = await ctx.db
+    .query("aiTurnQueue")
+    .withIndex("by_matchId", (q: any) => q.eq("matchId", matchId))
+    .collect();
+  const now = Date.now();
+
+  const hasFreshJob = queuedRows.some(
+    (queuedRow: any) => now - queuedRow.createdAt < AI_TURN_QUEUE_DEDUPE_MS,
+  );
+
+  for (const queuedRow of queuedRows) {
+    if (now - queuedRow.createdAt >= AI_TURN_QUEUE_DEDUPE_MS) {
+      await ctx.db.delete(queuedRow._id);
+    }
+  }
+
+  if (hasFreshJob) {
+    return false;
+  }
+
+  await ctx.db.insert("aiTurnQueue", {
+    matchId,
+    createdAt: now,
+  });
+  return true;
+}
+
+async function claimQueuedAITurn(ctx: any, matchId: string): Promise<boolean> {
+  const queuedRows = await ctx.db
+    .query("aiTurnQueue")
+    .withIndex("by_matchId", (q: any) => q.eq("matchId", matchId))
+    .collect();
+  if (queuedRows.length === 0) {
+    return false;
+  }
+
+  for (const queuedRow of queuedRows) {
+    await ctx.db.delete(queuedRow._id);
+  }
+  return true;
+}
+
 const createStarterDeckFromRecipe = async (ctx: any, userId: string) => {
   const deckCode = resolveDefaultStarterDeckCode();
   if (!deckCode) return null;
@@ -87,7 +167,7 @@ const createStarterDeckFromRecipe = async (ctx: any, userId: string) => {
   const recipe = DECK_RECIPES[deckCode];
   if (!recipe) return null;
 
-  const allCards = await cards.cards.getAllCards(ctx);
+  const allCards = await getCachedCardDefinitions(ctx);
   const byName = new Map<string, any>();
   for (const c of allCards ?? []) {
     byName.set(c.name, c);
@@ -204,6 +284,62 @@ export const getAllCards = query({
   args: {},
   returns: v.any(),
   handler: async (ctx) => cards.cards.getAllCards(ctx),
+});
+
+const vCatalogCard = v.object({
+  _id: v.string(),
+  name: v.string(),
+  cardType: v.string(),
+  archetype: v.optional(v.string()),
+  attack: v.optional(v.number()),
+  defense: v.optional(v.number()),
+  flavorText: v.optional(v.string()),
+  rarity: v.optional(v.string()),
+  isActive: v.boolean(),
+});
+
+const vUserCardCount = v.object({
+  cardDefinitionId: v.string(),
+  quantity: v.number(),
+});
+
+export const getCatalogCards = query({
+  args: {},
+  returns: v.array(vCatalogCard),
+  handler: async (ctx) => {
+    const allCards = await getCachedCardDefinitions(ctx);
+    return allCards
+      .map((card: any) => ({
+        _id: String(card?._id ?? ""),
+        name: String(card?.name ?? ""),
+        cardType: String(card?.cardType ?? ""),
+        archetype: typeof card?.archetype === "string" ? card.archetype : undefined,
+        attack: typeof card?.attack === "number" ? card.attack : undefined,
+        defense: typeof card?.defense === "number" ? card.defense : undefined,
+        flavorText: typeof card?.flavorText === "string" ? card.flavorText : undefined,
+        rarity: typeof card?.rarity === "string" ? card.rarity : undefined,
+        isActive: Boolean(card?.isActive),
+      }))
+      .filter((card) => card._id.length > 0 && card.name.length > 0 && card.cardType.length > 0);
+  },
+});
+
+export const getUserCardCounts = query({
+  args: {},
+  returns: v.array(vUserCardCount),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const userCards = await cards.cards.getUserCards(ctx, user._id);
+    return (userCards ?? [])
+      .map((userCard: any) => ({
+        cardDefinitionId: String(userCard?.cardDefinitionId ?? ""),
+        quantity: Number(userCard?.quantity ?? 0),
+      }))
+      .filter(
+        (userCard: { cardDefinitionId: string; quantity: number }) =>
+          userCard.cardDefinitionId.length > 0 && userCard.quantity > 0,
+      );
+  },
 });
 
 export const getStarterDecks = query({
@@ -330,7 +466,7 @@ export const selectStarterDeck = mutation({
       throw new ConvexError(`Unknown deck code: ${args.deckCode}`);
     }
 
-    const allCards = await cards.cards.getAllCards(ctx);
+    const allCards = await getCachedCardDefinitions(ctx);
     const resolvedCards = resolveDeckCards(allCards ?? [], recipe);
     if (resolvedCards.length === 0) {
       throw new ConvexError("No cards available to build starter deck.");
@@ -684,7 +820,7 @@ export const startStoryBattle = mutation({
     const playerDeck = getDeckCardIdsFromDeckData(deckData);
     if (playerDeck.length < 30) throw new ConvexError("Deck must have at least 30 cards");
 
-    const allCards = await cards.cards.getAllCards(ctx);
+    const allCards = await getCachedCardDefinitions(ctx);
     const aiDeck = buildAIDeck(allCards);
 
     const cardLookup = buildCardLookup(allCards as any);
@@ -931,12 +1067,20 @@ async function submitActionForActor(
     (meta as any)?.isAIOpponent &&
     args.seat !== aiSeat
   ) {
-    const events = JSON.parse(result.events);
+    let events: any[] = [];
+    try {
+      events = JSON.parse(result.events);
+    } catch {
+      events = [];
+    }
     const gameOver = events.some((e: any) => e.type === "GAME_ENDED");
     if (!gameOver) {
-      await ctx.scheduler.runAfter(500, internal.game.executeAITurn, {
-        matchId: args.matchId,
-      });
+      const queued = await queueAITurn(ctx, args.matchId);
+      if (queued) {
+        await ctx.scheduler.runAfter(500, internal.game.executeAITurn, {
+          matchId: args.matchId,
+        });
+      }
     }
   }
 
@@ -1166,6 +1310,9 @@ export const executeAITurn = internalMutation({
   args: { matchId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const claimed = await claimQueuedAITurn(ctx, args.matchId);
+    if (!claimed) return null;
+
     // Guard: check it's still AI's turn before acting.
     // This prevents duplicate AI turns if the scheduler fires twice
     // (e.g., from rapid player actions or network retries).
@@ -1173,12 +1320,7 @@ export const executeAITurn = internalMutation({
     const aiSeat = resolveAICupSeat(meta);
     if ((meta as any)?.status !== "active" || !aiSeat) return null;
 
-    // Get all cards for card lookup
-    const allCards = await cards.cards.getAllCards(ctx);
-    const cardLookup: Record<string, any> = {};
-    for (const card of allCards ?? []) {
-      cardLookup[card._id] = card;
-    }
+    const cardLookup = await getCachedCardLookup(ctx);
 
     // Loop up to 20 actions
     for (let i = 0; i < 20; i++) {

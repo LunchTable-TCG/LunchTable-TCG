@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useConvexAuth } from "convex/react";
 import * as Sentry from "@sentry/react";
@@ -17,6 +17,7 @@ type CardDef = {
 };
 
 type DeckCard = { cardDefinitionId: string; quantity: number };
+type UserCardCount = { cardDefinitionId: string; quantity: number };
 
 const MAX_COPIES = 3;
 const MIN_DECK_SIZE = 30;
@@ -53,11 +54,11 @@ export function DeckBuilder() {
   ) as { name?: string; deckArchetype?: string; cards?: DeckCard[] } | null | undefined;
 
   const userCards = useConvexQuery(
-    apiAny.game.getUserCards,
+    apiAny.game.getUserCardCounts,
     isAuthenticated ? {} : "skip",
-  ) as any[] | undefined;
+  ) as UserCardCount[] | undefined;
 
-  const allCards = useConvexQuery(apiAny.game.getAllCards, {}) as CardDef[] | undefined;
+  const allCards = useConvexQuery(apiAny.game.getCatalogCards, {}) as CardDef[] | undefined;
 
   const saveDeck = useConvexMutation(apiAny.game.saveDeck);
 
@@ -66,15 +67,25 @@ export function DeckBuilder() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [filter, setFilter] = useState("");
+  const initializedDeckIdRef = useRef<string | null>(null);
 
-  // Initialize local state from server once
-  if (localCards === null && deckData?.cards) {
+  useEffect(() => {
+    initializedDeckIdRef.current = null;
+    setLocalCards(null);
+    setSaved(false);
+  }, [deckId]);
+
+  useEffect(() => {
+    if (!deckId || !deckData?.cards) return;
+    if (initializedDeckIdRef.current === deckId) return;
+
     const map = new Map<string, number>();
     for (const c of deckData.cards) {
       map.set(c.cardDefinitionId, c.quantity);
     }
     setLocalCards(map);
-  }
+    initializedDeckIdRef.current = deckId;
+  }, [deckData?.cards, deckId]);
 
   const cards = localCards ?? new Map<string, number>();
 

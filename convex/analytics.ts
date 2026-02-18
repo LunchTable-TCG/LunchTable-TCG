@@ -19,15 +19,20 @@ if (process.env.POSTHOG_KEY) {
     });
 }
 
+let warnedMissingPosthogKey = false;
+let warnedMissingSentryDsn = false;
+
 /**
  * Validates environment variables are set for analytics.
  */
 function ensureEnv() {
-    if (!process.env.POSTHOG_KEY) {
+    if (!process.env.POSTHOG_KEY && !warnedMissingPosthogKey) {
         console.warn("POSTHOG_KEY is not set. Analytics will not be tracked.");
+        warnedMissingPosthogKey = true;
     }
-    if (!process.env.SENTRY_DSN) {
+    if (!process.env.SENTRY_DSN && !warnedMissingSentryDsn) {
         console.warn("SENTRY_DSN is not set. Errors will not be reported to Sentry.");
+        warnedMissingSentryDsn = true;
     }
 }
 
@@ -46,7 +51,7 @@ export const trackEvent = action({
                 event: args.event,
                 properties: args.properties,
             });
-            await posthog.shutdown(); // Ensure events are flushed
+            await posthog.flush();
         }
         return null;
     },
