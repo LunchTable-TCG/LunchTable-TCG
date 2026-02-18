@@ -32,11 +32,7 @@ export function decideSummon(
     return events;
   }
 
-  // Check board space
   const board = seat === "host" ? state.hostBoard : state.awayBoard;
-  if (board.length >= state.config.maxBoardSlots) {
-    return events;
-  }
 
   // Check tribute requirements
   const level = card.level ?? 0;
@@ -59,10 +55,14 @@ export function decideSummon(
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId: tributeCardId,
           from: "board",
+          sourceSeat: seat,
         });
       } else {
     // Level 1-6: no tribute needed
     if (tributeCardIds.length > 0) {
+      return events;
+    }
+    if (board.length >= state.config.maxBoardSlots) {
       return events;
     }
   }
@@ -287,37 +287,63 @@ export function evolveSummon(state: GameState, event: EngineEvent): GameState {
     }
 
     case "CARD_SENT_TO_GRAVEYARD": {
-      const { cardId, from } = event;
+      const { cardId, from, sourceSeat } = event;
+
+      const removeFromSeatBoard = (seat: Seat) => {
+        if (seat === "host") {
+          const idx = newState.hostBoard.findIndex((c) => c.cardId === cardId);
+          if (idx > -1) {
+            newState.hostBoard = [...newState.hostBoard];
+            newState.hostBoard.splice(idx, 1);
+            newState.hostGraveyard = [...newState.hostGraveyard, cardId];
+            return true;
+          }
+          return false;
+        }
+
+        const idx = newState.awayBoard.findIndex((c) => c.cardId === cardId);
+        if (idx > -1) {
+          newState.awayBoard = [...newState.awayBoard];
+          newState.awayBoard.splice(idx, 1);
+          newState.awayGraveyard = [...newState.awayGraveyard, cardId];
+          return true;
+        }
+        return false;
+      };
+
+      const removeFromSeatHand = (seat: Seat) => {
+        if (seat === "host") {
+          const idx = newState.hostHand.indexOf(cardId);
+          if (idx > -1) {
+            newState.hostHand = [...newState.hostHand];
+            newState.hostHand.splice(idx, 1);
+            newState.hostGraveyard = [...newState.hostGraveyard, cardId];
+            return true;
+          }
+          return false;
+        }
+
+        const idx = newState.awayHand.indexOf(cardId);
+        if (idx > -1) {
+          newState.awayHand = [...newState.awayHand];
+          newState.awayHand.splice(idx, 1);
+          newState.awayGraveyard = [...newState.awayGraveyard, cardId];
+          return true;
+        }
+        return false;
+      };
 
       if (from === "board") {
-        // Find which player's board has this card
-        const hostIndex = newState.hostBoard.findIndex((c) => c.cardId === cardId);
-        if (hostIndex > -1) {
-          newState.hostBoard = [...newState.hostBoard];
-          newState.hostBoard.splice(hostIndex, 1);
-          newState.hostGraveyard = [...newState.hostGraveyard, cardId];
-        } else {
-          const awayIndex = newState.awayBoard.findIndex((c) => c.cardId === cardId);
-          if (awayIndex > -1) {
-            newState.awayBoard = [...newState.awayBoard];
-            newState.awayBoard.splice(awayIndex, 1);
-            newState.awayGraveyard = [...newState.awayGraveyard, cardId];
-          }
+        if (sourceSeat) {
+          removeFromSeatBoard(sourceSeat);
+        } else if (!removeFromSeatBoard("host")) {
+          removeFromSeatBoard("away");
         }
       } else if (from === "hand") {
-        // Find which player's hand has this card
-        const hostIndex = newState.hostHand.indexOf(cardId);
-        if (hostIndex > -1) {
-          newState.hostHand = [...newState.hostHand];
-          newState.hostHand.splice(hostIndex, 1);
-          newState.hostGraveyard = [...newState.hostGraveyard, cardId];
-        } else {
-          const awayIndex = newState.awayHand.indexOf(cardId);
-          if (awayIndex > -1) {
-            newState.awayHand = [...newState.awayHand];
-            newState.awayHand.splice(awayIndex, 1);
-            newState.awayGraveyard = [...newState.awayGraveyard, cardId];
-          }
+        if (sourceSeat) {
+          removeFromSeatHand(sourceSeat);
+        } else if (!removeFromSeatHand("host")) {
+          removeFromSeatHand("away");
         }
       }
       break;

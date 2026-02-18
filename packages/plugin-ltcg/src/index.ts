@@ -17,6 +17,8 @@
  *   JOIN_LTCG_MATCH    — Join an open human-hosted match as the away seat
  *   PLAY_LTCG_TURN     — Auto-play one turn (summon, attack, end)
  *   PLAY_LTCG_STORY    — Play through a full story stage (start → loop → complete)
+ *   JOIN_LTCG_MATCH    — Join a waiting match as the away seat
+ *   RUN_LTCG_AUTONOMOUS — Deterministic autonomy controller (start/pause/resume/stop)
  *   CHECK_LTCG_STATUS  — Check current match state
  *   SURRENDER_LTCG     — Forfeit the current match
  *   GET_LTCG_SOUNDTRACK — Fetch soundtrack catalog for agent streaming
@@ -27,6 +29,7 @@
  * Routes:
  *   GET /api/status — Plugin health and match state for monitoring
  *   GET /status — Legacy health endpoint alias for compatibility
+ *   GET/POST /api/ltcg/autonomy/* — Autonomy control endpoints
  *
  * Events:
  *   ACTION_STARTED / ACTION_COMPLETED — Logs LTCG action activity
@@ -43,7 +46,21 @@ import { surrenderAction } from "./actions/surrender.js";
 import { playStoryAction } from "./actions/playStory.js";
 import { joinMatchAction } from "./actions/joinMatch.js";
 import { getSoundtrackAction } from "./actions/getSoundtrack.js";
+import {
+  runAutonomyAction,
+  pauseAutonomyAction,
+  resumeAutonomyAction,
+  stopAutonomyAction,
+  getAutonomyStatusAction,
+} from "./actions/autonomy.js";
 import { statusRoute, statusRouteLegacy } from "./routes/status.js";
+import {
+  autonomyStatusRoute,
+  autonomyStartRoute,
+  autonomyPauseRoute,
+  autonomyResumeRoute,
+  autonomyStopRoute,
+} from "./routes/autonomy.js";
 import { ltcgEvents } from "./events.js";
 import { getEnvValue } from "./env.js";
 import type { Plugin, IAgentRuntime } from "./types.js";
@@ -100,19 +117,32 @@ const plugin: Plugin = {
   providers: [gameStateProvider],
 
   actions: [
+    getAutonomyStatusAction,
+    runAutonomyAction,
+    pauseAutonomyAction,
+    resumeAutonomyAction,
+    stopAutonomyAction,
     startDuelAliasAction,
     startDuelAction,
     startBattleAliasAction,
     startBattleAction,
+    joinMatchAction,
     playTurnAction,
     playStoryAction,
     getStatusAction,
-    joinMatchAction,
     surrenderAction,
     getSoundtrackAction,
   ],
 
-  routes: [statusRoute, statusRouteLegacy],
+  routes: [
+    statusRoute,
+    statusRouteLegacy,
+    autonomyStatusRoute,
+    autonomyStartRoute,
+    autonomyPauseRoute,
+    autonomyResumeRoute,
+    autonomyStopRoute,
+  ],
 
   events: ltcgEvents,
 };
@@ -126,13 +156,28 @@ export { startDuelAction } from "./actions/startDuel.js";
 export { startDuelAliasAction } from "./actions/startDuel.js";
 export { startBattleAction, startBattleAliasAction } from "./actions/startBattle.js";
 export { playTurnAction } from "./actions/playTurn.js";
+export { joinMatchAction } from "./actions/joinMatch.js";
 export { getStatusAction } from "./actions/getStatus.js";
 export { surrenderAction } from "./actions/surrender.js";
 export { playStoryAction } from "./actions/playStory.js";
-export { joinMatchAction } from "./actions/joinMatch.js";
 export { getSoundtrackAction } from "./actions/getSoundtrack.js";
+export {
+  runAutonomyAction,
+  pauseAutonomyAction,
+  resumeAutonomyAction,
+  stopAutonomyAction,
+  getAutonomyStatusAction,
+} from "./actions/autonomy.js";
 export { statusRoute, statusRouteLegacy } from "./routes/status.js";
+export {
+  autonomyStatusRoute,
+  autonomyStartRoute,
+  autonomyPauseRoute,
+  autonomyResumeRoute,
+  autonomyStopRoute,
+} from "./routes/autonomy.js";
 export { ltcgEvents } from "./events.js";
+export { getAutonomyController } from "./autonomy/controller.js";
 export type {
   AgentInfo,
   BoardCard,
@@ -146,5 +191,6 @@ export type {
   StageCompletionResult,
   StageData,
   StarterDeck,
+  StoryNextStageResponse,
   StoryProgress,
 } from "./types.js";

@@ -1,5 +1,6 @@
 import { components } from "./_generated/api";
 import { mutation } from "./_generated/server";
+import { v } from "convex/values";
 import { LTCGCards } from "@lunchtable-tcg/cards";
 import { LTCGStory } from "@lunchtable-tcg/story";
 import { CARD_DEFINITIONS, STARTER_DECKS } from "./cardData";
@@ -9,6 +10,12 @@ const story = new LTCGStory(components.lunchtable_tcg_story as any);
 
 export const seedAll = mutation({
   args: {},
+  returns: v.object({
+    cards: v.any(),
+    decks: v.any(),
+    chapters: v.number(),
+    stages: v.number(),
+  }),
   handler: async (ctx) => {
     // Seed all 132 card definitions
     const cardResult = await cards.seeds.seedCardDefinitions(

@@ -10,8 +10,10 @@ export type ValidActions = {
   canFlipSummon: Set<string>;
 };
 
-const MAX_BOARD_SLOTS = 3;
-const MAX_SPELL_TRAP_SLOTS = 3;
+const toFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
+};
 const TRIBUTE_LEVEL = 7;
 
 export function deriveValidActions(params: {
@@ -39,48 +41,64 @@ export function deriveValidActions(params: {
   if (!isChainWindow && !isMyTurn) return va;
 
   const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
+  const maxBoardSlots = toFiniteNumber(view.maxBoardSlots) ?? 3;
+  const maxSpellTrapSlots = toFiniteNumber(view.maxSpellTrapSlots) ?? 3;
+  const normalSummonedThisTurn = view.normalSummonedThisTurn === true;
   const board = view.board ?? [];
   const hand = view.hand ?? [];
   const stZone = view.spellTrapZone ?? [];
   const opponentBoard = view.opponentBoard ?? [];
+  const hasBoardSpace = board.length < maxBoardSlots;
+  const hasTributeCandidates = board.some((card) => !card.faceDown);
+  const hasSpellTrapSpace = stZone.length < maxSpellTrapSlots;
 
   if (isMainPhase) {
-    if (board.length < MAX_BOARD_SLOTS) {
+    if (!normalSummonedThisTurn) {
       for (const cardId of hand) {
         const card = cardLookup[cardId];
         if (!card) continue;
         if (card.cardType === "stereotype" || card.type === "stereotype") {
           const level = card.level ?? 0;
           const needsTribute = level >= TRIBUTE_LEVEL;
-          va.canSummon.set(cardId, { positions: ["attack", "defense"], needsTribute });
-          va.canSetMonster.add(cardId);
+
+          if (needsTribute) {
+            if (hasTributeCandidates) {
+              va.canSummon.set(cardId, { positions: ["attack", "defense"], needsTribute: true });
+            }
+          } else if (hasBoardSpace) {
+            va.canSummon.set(cardId, { positions: ["attack", "defense"], needsTribute: false });
+          }
+
+          if (hasBoardSpace) {
+            va.canSetMonster.add(cardId);
+          }
         }
       }
-    }
 
-    if (stZone.length < MAX_SPELL_TRAP_SLOTS) {
-      for (const cardId of hand) {
-        const card = cardLookup[cardId];
+      if (hasSpellTrapSpace) {
+        for (const cardId of hand) {
+          const card = cardLookup[cardId];
+          if (!card) continue;
+          if (card.cardType === "spell" || card.type === "spell") {
+            va.canSetSpellTrap.add(cardId);
+            va.canActivateSpell.add(cardId);
+          }
+          if (card.cardType === "trap" || card.type === "trap") {
+            va.canSetSpellTrap.add(cardId);
+          }
+        }
+      }
+
+      for (const stCard of stZone) {
+        if (!stCard.faceDown) continue;
+        const card = cardLookup[stCard.definitionId];
         if (!card) continue;
-        if (card.cardType === "spell" || card.type === "spell") {
-          va.canSetSpellTrap.add(cardId);
-          va.canActivateSpell.add(cardId);
+        if (card.type === "spell" || card.cardType === "spell") {
+          va.canActivateSpell.add(stCard.cardId);
         }
-        if (card.cardType === "trap" || card.type === "trap") {
-          va.canSetSpellTrap.add(cardId);
+        if (card.type === "trap" || card.cardType === "trap") {
+          va.canActivateTrap.add(stCard.cardId);
         }
-      }
-    }
-
-    for (const stCard of stZone) {
-      if (!stCard.faceDown) continue;
-      const card = cardLookup[stCard.definitionId];
-      if (!card) continue;
-      if (card.type === "spell" || card.cardType === "spell") {
-        va.canActivateSpell.add(stCard.cardId);
-      }
-      if (card.type === "trap" || card.cardType === "trap") {
-        va.canActivateTrap.add(stCard.cardId);
       }
     }
 

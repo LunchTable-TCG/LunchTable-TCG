@@ -14,6 +14,7 @@ type CardDef = {
   rarity?: string;
   isActive?: boolean;
 };
+type UserCardCount = { cardDefinitionId: string; quantity: number };
 
 const ARCHETYPE_COLORS: Record<string, string> = {
   dropouts: "#e53e3e",
@@ -33,16 +34,16 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function Collection() {
   const { isAuthenticated } = useConvexAuth();
-  const allCards = useConvexQuery(apiAny.game.getAllCards, {}) as CardDef[] | undefined;
+  const allCards = useConvexQuery(apiAny.game.getCatalogCards, {}) as CardDef[] | undefined;
   const userCards = useConvexQuery(
-    apiAny.game.getUserCards,
+    apiAny.game.getUserCardCounts,
     isAuthenticated ? {} : "skip",
-  ) as any[] | undefined;
+  ) as UserCardCount[] | undefined;
 
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
-  const ownedIds = new Set((userCards ?? []).map((c: any) => c.cardDefinitionId));
+  const ownedIds = new Set((userCards ?? []).map((c) => c.cardDefinitionId));
 
   const filtered = (allCards ?? []).filter((card) => {
     if (!card.isActive) return false;

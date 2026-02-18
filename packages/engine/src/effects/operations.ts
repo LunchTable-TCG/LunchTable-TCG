@@ -42,6 +42,83 @@ function findSpellTrapCard(state: GameState, cardId: string): { card: SpellTrapC
   return null;
 }
 
+type TransferZone =
+  | "board"
+  | "hand"
+  | "spell_trap_zone"
+  | "field"
+  | "graveyard"
+  | "banished"
+  | "deck";
+
+function detectCardZone(state: GameState, cardId: string): TransferZone | null {
+  if (findBoardCard(state, cardId)) return "board";
+
+  if (state.hostHand.includes(cardId) || state.awayHand.includes(cardId)) {
+    return "hand";
+  }
+
+  if (
+    state.hostSpellTrapZone.some((card) => card.cardId === cardId) ||
+    state.awaySpellTrapZone.some((card) => card.cardId === cardId)
+  ) {
+    return "spell_trap_zone";
+  }
+
+  if (state.hostFieldSpell?.cardId === cardId || state.awayFieldSpell?.cardId === cardId) {
+    return "field";
+  }
+
+  if (state.hostGraveyard.includes(cardId) || state.awayGraveyard.includes(cardId)) {
+    return "graveyard";
+  }
+
+  if (state.hostBanished.includes(cardId) || state.awayBanished.includes(cardId)) {
+    return "banished";
+  }
+
+  if (state.hostDeck.includes(cardId) || state.awayDeck.includes(cardId)) {
+    return "deck";
+  }
+
+  return null;
+}
+
+function detectCardZoneAndSeat(
+  state: GameState,
+  cardId: string
+): { from: TransferZone; sourceSeat: Seat } | null {
+  const boardCard = findBoardCard(state, cardId);
+  if (boardCard) return { from: "board", sourceSeat: boardCard.seat };
+
+  if (state.hostHand.includes(cardId)) return { from: "hand", sourceSeat: "host" };
+  if (state.awayHand.includes(cardId)) return { from: "hand", sourceSeat: "away" };
+
+  const hostSpellTrap = state.hostSpellTrapZone.find((card) => card.cardId === cardId);
+  if (hostSpellTrap) {
+    return { from: "spell_trap_zone", sourceSeat: "host" };
+  }
+  const awaySpellTrap = state.awaySpellTrapZone.find((card) => card.cardId === cardId);
+  if (awaySpellTrap) {
+    return { from: "spell_trap_zone", sourceSeat: "away" };
+  }
+
+  if (state.hostFieldSpell?.cardId === cardId) {
+    return { from: "field", sourceSeat: "host" };
+  }
+  if (state.awayFieldSpell?.cardId === cardId) {
+    return { from: "field", sourceSeat: "away" };
+  }
+
+  if (state.hostGraveyard.includes(cardId)) return { from: "graveyard", sourceSeat: "host" };
+  if (state.awayGraveyard.includes(cardId)) return { from: "graveyard", sourceSeat: "away" };
+
+  if (state.hostBanished.includes(cardId)) return { from: "banished", sourceSeat: "host" };
+  if (state.awayBanished.includes(cardId)) return { from: "banished", sourceSeat: "away" };
+
+  return null;
+}
+
 // ── Operation Handlers ───────────────────────────────────────────
 
 function executeDestroy(
@@ -55,21 +132,38 @@ function executeDestroy(
 
   if (action.target === "all_opponent_monsters") {
     const opponentBoard = activatingPlayer === "host" ? state.awayBoard : state.hostBoard;
+    const targetSeat = opponentSeat(activatingPlayer);
     for (const card of opponentBoard) {
       events.push({ type: "CARD_DESTROYED", cardId: card.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: card.cardId, from: "board" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: card.cardId,
+        from: "board",
+        sourceSeat: targetSeat,
+      });
     }
   } else if (action.target === "all_spells_traps") {
     const opponentZone = activatingPlayer === "host" ? state.awaySpellTrapZone : state.hostSpellTrapZone;
     const opponentField = activatingPlayer === "host" ? state.awayFieldSpell : state.hostFieldSpell;
+    const targetSeat = opponentSeat(activatingPlayer);
 
     for (const card of opponentZone) {
       events.push({ type: "CARD_DESTROYED", cardId: card.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: card.cardId, from: "spell_trap_zone" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: card.cardId,
+        from: "spell_trap_zone",
+        sourceSeat: targetSeat,
+      });
     }
     if (opponentField) {
       events.push({ type: "CARD_DESTROYED", cardId: opponentField.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: opponentField.cardId, from: "field" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: opponentField.cardId,
+        from: "field",
+        sourceSeat: targetSeat,
+      });
     }
   } else if (action.target === "selected") {
     // Destroy specific targets
@@ -79,10 +173,20 @@ function executeDestroy(
 
       if (boardCard) {
         events.push({ type: "CARD_DESTROYED", cardId: targetId, reason: "effect" });
-        events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "board" });
+        events.push({
+          type: "CARD_SENT_TO_GRAVEYARD",
+          cardId: targetId,
+          from: "board",
+          sourceSeat: boardCard.seat,
+        });
       } else if (spellTrap) {
         events.push({ type: "CARD_DESTROYED", cardId: targetId, reason: "effect" });
-        events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "spell_trap_zone" });
+        events.push({
+          type: "CARD_SENT_TO_GRAVEYARD",
+          cardId: targetId,
+          from: "spell_trap_zone",
+          sourceSeat: spellTrap.seat,
+        });
       }
     }
   }
@@ -233,9 +337,15 @@ function executeBanish(
   const events: EngineEvent[] = [];
 
   for (const targetId of targets) {
-    const boardCard = findBoardCard(state, targetId);
-    const from = boardCard ? "board" : "hand"; // simplified
-    events.push({ type: "CARD_BANISHED", cardId: targetId, from });
+    const detectedSource = detectCardZoneAndSeat(state, targetId);
+    if (!detectedSource) continue;
+
+    events.push({
+      type: "CARD_BANISHED",
+      cardId: targetId,
+      from: detectedSource.from,
+      sourceSeat: detectedSource.sourceSeat,
+    });
   }
 
   return events;
@@ -249,10 +359,11 @@ function executeReturnToHand(
   const events: EngineEvent[] = [];
 
   for (const targetId of targets) {
-    const boardCard = findBoardCard(state, targetId);
-    const spellTrap = boardCard ? null : findSpellTrapCard(state, targetId);
-    const from = boardCard ? "board" : spellTrap ? "spell_trap_zone" : "graveyard";
-    events.push({ type: "CARD_RETURNED_TO_HAND", cardId: targetId, from });
+    const detectedSource = detectCardZoneAndSeat(state, targetId);
+    if (!detectedSource) continue;
+
+    const { from, sourceSeat } = detectedSource;
+    events.push({ type: "CARD_RETURNED_TO_HAND", cardId: targetId, from, sourceSeat });
   }
 
   return events;
@@ -275,14 +386,19 @@ function executeDiscard(
       hand[handIndex],
       `effects.operations.executeDiscard missing hand card at index ${handIndex}`
     );
-    events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId, from: "hand" });
+    events.push({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId,
+      from: "hand",
+      sourceSeat: targetSeat,
+    });
   }
 
   return events;
 }
 
 function executeSpecialSummon(
-  _state: GameState,
+  state: GameState,
   action: Extract<EffectAction, { type: "special_summon" }>,
   activatingPlayer: Seat,
   targets: string[]
@@ -291,11 +407,15 @@ function executeSpecialSummon(
 
   // Special summon targets from the specified location
   for (const targetId of targets) {
+    const detectedSource = detectCardZone(state, targetId);
+    if (!detectedSource) continue;
+    if (detectedSource !== action.from) continue;
+
     events.push({
       type: "SPECIAL_SUMMONED",
       seat: activatingPlayer,
       cardId: targetId,
-      from: action.from,
+      from: detectedSource,
       position: "attack",
     });
   }

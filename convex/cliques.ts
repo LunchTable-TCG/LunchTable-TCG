@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
@@ -256,7 +256,7 @@ const assignUserToCliqueByArchetype = async (
   if (!clique) return null;
 
   const user = await ctx.db.get(userId);
-  if (!user) throw new Error("User not found");
+  if (!user) throw new ConvexError("User not found");
 
   if (user.cliqueId) {
     const existingClique = await ctx.db.get(user.cliqueId);
@@ -331,7 +331,7 @@ export const getCliqueDashboard = query({
     const cliques = sortCliques(await ctx.db.query("cliques").collect());
 
     const myClique = user.cliqueId ? await ctx.db.get(user.cliqueId) : null;
-    const myArchetype = await resolveUserStarterArchetype(ctx, user);
+    const myArchetype = myClique?.archetype ?? (await resolveUserStarterArchetype(ctx, user));
 
     const members = user.cliqueId
       ? await ctx.db
@@ -340,7 +340,9 @@ export const getCliqueDashboard = query({
           .collect()
       : [];
 
-    members.sort((a, b) => (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""));
+    members.sort((a, b) =>
+      (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""),
+    );
 
     const rosterPreview = members.slice(0, 12).map((member) => ({
       _id: member._id,
@@ -355,7 +357,9 @@ export const getCliqueDashboard = query({
       myArchetype,
       myClique,
       myCliqueMembers: rosterPreview,
-      myCliqueMemberOverflow: Math.max(0, members.length - rosterPreview.length),
+      myCliqueMemberOverflow: myClique
+        ? Math.max(0, myClique.memberCount - rosterPreview.length)
+        : 0,
       totalPlayers: cliques.reduce((sum, clique) => sum + clique.memberCount, 0),
       leaderboard: cliques.map((clique, index) => ({
         ...clique,
@@ -374,6 +378,9 @@ export const getCliqueMembers = query({
       .query("users")
       .withIndex("by_clique", (q) => q.eq("cliqueId", args.cliqueId))
       .collect();
+    members.sort((a, b) =>
+      (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""),
+    );
     return members.map((m) => ({
       _id: m._id,
       _creationTime: m._creationTime,
@@ -393,12 +400,12 @@ export const joinClique = mutation({
 
     const clique = await ctx.db.get(args.cliqueId);
     if (!clique) {
-      throw new Error("Clique not found");
+      throw new ConvexError("Clique not found");
     }
 
     const userArchetype = await resolveUserStarterArchetype(ctx, user);
     if (userArchetype && clique.archetype !== userArchetype) {
-      throw new Error(
+      throw new ConvexError(
         `Starter deck locked to ${userArchetype}. You can only join that clique.`,
       );
     }
@@ -409,6 +416,7 @@ export const joinClique = mutation({
 
 export const leaveClique = mutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
 
@@ -416,17 +424,26 @@ export const leaveClique = mutation({
       throw new Error("Not in a clique");
     }
 
-    const clique = await ctx.db.get(user.cliqueId);
+    const cliqueId = user.cliqueId;
+    const clique = await ctx.db.get(cliqueId);
     if (!clique) {
-      throw new Error("Clique not found");
+      // Repair stale membership references idempotently.
+      await ctx.db.patch(user._id, {
+        cliqueId: undefined,
+        cliqueRole: undefined,
+      });
+      return null;
     }
+
+    let deletedClique = false;
 
     // Leaders/founders can't leave if they're the only one
     if (user.cliqueRole === "founder" || user.cliqueRole === "leader") {
       if (clique.memberCount <= 1) {
-        await ctx.db.delete(user.cliqueId);
+        await ctx.db.delete(cliqueId);
+        deletedClique = true;
       } else {
-        throw new Error("Transfer leadership before leaving");
+        throw new ConvexError("Transfer leadership before leaving");
       }
     }
 
@@ -437,14 +454,18 @@ export const leaveClique = mutation({
     });
 
     // Update member count
-    await ctx.db.patch(user.cliqueId, {
-      memberCount: Math.max(0, clique.memberCount - 1),
-    });
+    if (!deletedClique) {
+      await ctx.db.patch(cliqueId, {
+        memberCount: Math.max(0, clique.memberCount - 1),
+      });
+    }
+    return null;
   },
 });
 
 export const seedCliques = internalMutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     // Check if already seeded
     const existing = await ctx.db.query("cliques").first();
@@ -459,6 +480,7 @@ export const seedCliques = internalMutation({
         createdAt: Date.now(),
       });
     }
+    return null;
   },
 });
 

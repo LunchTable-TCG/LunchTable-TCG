@@ -15,6 +15,7 @@ import "./globals.css";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "./lib/posthog";
 import { AudioProvider } from "@/components/audio/AudioProvider";
+import { enableDiscordUrlMappingsForActivity } from "@/lib/discordUrlMappings";
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
@@ -35,8 +36,11 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
 });
 
-const convexUrl = (import.meta.env.VITE_CONVEX_URL as string).trim();
-const convex = new ConvexReactClient(convexUrl);
+enableDiscordUrlMappingsForActivity();
+
+const convexUrl =
+  ((import.meta.env.VITE_CONVEX_URL as string | undefined) ?? "").trim();
+const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -64,14 +68,20 @@ createRoot(document.getElementById("root")!).render(
     >
       <PostHogProvider client={posthog}>
         <PrivyAuthProvider>
-          <ConvexProviderWithAuth
-            client={convex}
-            useAuth={usePrivyAuthForConvex}
-          >
+          {convex ? (
+            <ConvexProviderWithAuth
+              client={convex}
+              useAuth={usePrivyAuthForConvex}
+            >
+              <AudioProvider>
+                <App />
+              </AudioProvider>
+            </ConvexProviderWithAuth>
+          ) : (
             <AudioProvider>
               <App />
             </AudioProvider>
-          </ConvexProviderWithAuth>
+          )}
         </PrivyAuthProvider>
       </PostHogProvider>
     </Sentry.ErrorBoundary>

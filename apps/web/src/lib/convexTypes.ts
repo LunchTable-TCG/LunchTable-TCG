@@ -4,16 +4,6 @@ export type ClientPlatform = "web" | "telegram_inline" | "telegram_miniapp" | "a
 export type MatchMode = "pvp" | "story";
 export type MatchStatus = "waiting" | "active" | "ended";
 
-export type MatchPlatformPresence = {
-  matchId: string;
-  hostUserId: string;
-  awayUserId: string | null;
-  hostPlatform: ClientPlatform;
-  awayPlatform: ClientPlatform | null;
-  hostLastActiveAt: number;
-  awayLastActiveAt: number | null;
-};
-
 export const cliqueAssignmentStatuses = {
   assigned: "assigned",
   alreadyAssigned: "already_assigned",
@@ -39,6 +29,30 @@ export type MatchMeta = {
   createdAt: number;
   startedAt?: number;
   endedAt?: number;
+};
+
+export type MatchParticipantPlatformTag = {
+  userId: string;
+  username: string;
+  platform: ClientPlatform;
+  source: string | null;
+  lastSeenAt: number | null;
+};
+
+export type MatchPlatformTags = {
+  matchId: string;
+  host: MatchParticipantPlatformTag;
+  away: MatchParticipantPlatformTag | null;
+};
+
+export type MatchPlatformPresence = {
+  matchId: string;
+  hostUserId: string;
+  awayUserId: string | null;
+  hostPlatform: ClientPlatform | null;
+  awayPlatform: ClientPlatform | null;
+  hostLastActiveAt: number | null;
+  awayLastActiveAt: number | null;
 };
 
 export type StoryMatchContext = {
@@ -146,6 +160,9 @@ export type PlayerView = {
   currentPriorityPlayer: Seat | null;
   gameOver: boolean;
   turnNumber: number;
+  normalSummonedThisTurn?: boolean;
+  maxBoardSlots?: number;
+  maxSpellTrapSlots?: number;
   board: GameCardInstance[];
   opponentBoard: GameCardInstance[];
   hand: string[];
@@ -167,6 +184,9 @@ export type PlayerView = {
   currentChain: ChainLink[];
   winner: Seat | null;
   winReason: "lp_zero" | "deck_out" | "breakdown" | "surrender" | null;
+  normalSummonedThisTurn: boolean;
+  maxBoardSlots: number;
+  maxSpellTrapSlots: number;
   players?: {
     host?: {
       lifePoints?: number;

@@ -1,8 +1,11 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate, useLocation } from "react-router";
 import { useUserSync } from "@/hooks/auth/useUserSync";
+import { clearRedirect, peekRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
+import { buildAuthRedirectTarget, shouldClearStoredRedirect } from "@/hooks/auth/redirectTargets";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -17,6 +20,18 @@ interface AuthGuardProps {
  * 4. Ready → render children
  */
 export function AuthGuard({ children }: AuthGuardProps) {
+  const CONVEX_ENABLED = Boolean(
+    ((import.meta.env.VITE_CONVEX_URL as string | undefined) ?? "").trim(),
+  );
+
+  if (!PRIVY_ENABLED || !CONVEX_ENABLED) {
+    const navigate = useNavigate();
+    useEffect(() => {
+      navigate("/", { replace: true });
+    }, [navigate]);
+    return <AuthLoadingScreen message="Auth disabled in local mode..." />;
+  }
+
   const { ready, authenticated } = usePrivy();
   const { isLoading, needsOnboarding } = useUserSync();
   const navigate = useNavigate();
@@ -24,16 +39,30 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     if (!ready) return;
+    const currentTarget = buildAuthRedirectTarget(location);
 
     if (!authenticated) {
+      storeRedirect(currentTarget);
       navigate("/", { replace: true });
       return;
     }
 
     if (needsOnboarding && location.pathname !== "/onboarding") {
       navigate("/onboarding", { replace: true });
+      return;
     }
-  }, [ready, authenticated, needsOnboarding, navigate, location.pathname]);
+
+    const storedRedirect = peekRedirect();
+    if (
+      shouldClearStoredRedirect({
+        storedRedirect,
+        currentTarget,
+        needsOnboarding,
+      })
+    ) {
+      clearRedirect();
+    }
+  }, [ready, authenticated, needsOnboarding, navigate, location]);
 
   if (!ready) {
     return <AuthLoadingScreen message="Checking sign-in..." />;

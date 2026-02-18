@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useConvexAuth } from "convex/react";
 import { motion } from "framer-motion";
 import * as Sentry from "@sentry/react";
 import { apiAny, useConvexQuery, useConvexMutation } from "@/lib/convexHelpers";
@@ -42,11 +43,12 @@ export function StoryChapter() {
 
 function StoryChapterInner() {
   const { chapterId } = useParams<{ chapterId: string }>();
+  const { isAuthenticated } = useConvexAuth();
   const navigate = useNavigate();
   const { chapters, isStageComplete, isChapterUnlocked } = useStory();
   const currentUser = useConvexQuery(
     apiAny.auth.currentUser,
-    chapterId ? {} : "skip",
+    chapterId && isAuthenticated ? {} : "skip",
   ) as { activeDeckId?: string } | null | undefined;
 
   const stages = useConvexQuery(
@@ -55,7 +57,7 @@ function StoryChapterInner() {
   ) as Stage[] | undefined;
   const userDecks = useConvexQuery(
     apiAny.game.getUserDecks,
-    chapterId ? {} : "skip",
+    chapterId && isAuthenticated ? {} : "skip",
   ) as { deckId: string }[] | undefined;
   const starterDecks = useConvexQuery(
     apiAny.game.getStarterDecks,
@@ -165,9 +167,14 @@ function StoryChapterInner() {
 
   const handleCopyAgentMatch = async () => {
     if (!agentMatch?.matchId) return;
-    await navigator.clipboard.writeText(agentMatch.matchId);
-    setCopyMessage("Match ID copied.");
-    setTimeout(() => setCopyMessage(""), 2200);
+    try {
+      await navigator.clipboard.writeText(agentMatch.matchId);
+      setCopyMessage("Match ID copied.");
+    } catch {
+      setCopyMessage("Clipboard unavailable. Copy manually.");
+    } finally {
+      setTimeout(() => setCopyMessage(""), 2200);
+    }
   };
 
   const handleCancelAgentMatch = async () => {

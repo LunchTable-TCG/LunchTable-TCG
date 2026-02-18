@@ -12,13 +12,17 @@ import type * as agentAuth from "../agentAuth.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as cardData from "../cardData.js";
+import type * as cards from "../cards.js";
 import type * as cliques from "../cliques.js";
 import type * as crons from "../crons.js";
 import type * as dailyBriefing from "../dailyBriefing.js";
 import type * as game from "../game.js";
+import type * as guilds from "../guilds.js";
 import type * as http from "../http.js";
+import type * as matchAccess from "../matchAccess.js";
 import type * as seed from "../seed.js";
 import type * as signupAvatar from "../signupAvatar.js";
+import type * as story from "../story.js";
 import type * as telegram from "../telegram.js";
 import type * as telegramInline from "../telegramInline.js";
 import type * as telegramLinks from "../telegramLinks.js";
@@ -34,13 +38,17 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   auth: typeof auth;
   cardData: typeof cardData;
+  cards: typeof cards;
   cliques: typeof cliques;
   crons: typeof crons;
   dailyBriefing: typeof dailyBriefing;
   game: typeof game;
+  guilds: typeof guilds;
   http: typeof http;
+  matchAccess: typeof matchAccess;
   seed: typeof seed;
   signupAvatar: typeof signupAvatar;
+  story: typeof story;
   telegram: typeof telegram;
   telegramInline: typeof telegramInline;
   telegramLinks: typeof telegramLinks;
@@ -773,20 +781,14 @@ export declare const components: {
         "mutation",
         "internal",
         {
-          awayDeck?: Array<string>;
-          awayId?: string;
+          awayDeck: Array<string>;
+          awayId: string;
           hostDeck: Array<string>;
           hostId: string;
           isAIOpponent: boolean;
           mode: "pvp" | "story";
         },
         string
-      >;
-      joinMatch: FunctionReference<
-        "mutation",
-        "internal",
-        { awayDeck: Array<string>; awayId: string; matchId: string },
-        null
       >;
       startMatch: FunctionReference<
         "mutation",
@@ -839,27 +841,6 @@ export declare const components: {
         "query",
         "internal",
         { matchId: string },
-        {
-          _creationTime: number;
-          _id: string;
-          awayDeck: Array<string> | null;
-          awayId: string | null;
-          createdAt: number;
-          endReason?: string;
-          endedAt?: number;
-          hostDeck: Array<string>;
-          hostId: string;
-          isAIOpponent: boolean;
-          mode: "pvp" | "story";
-          startedAt?: number;
-          status: "waiting" | "active" | "ended";
-          winner?: "host" | "away";
-        } | null
-      >;
-      getOpenLobbyByHost: FunctionReference<
-        "query",
-        "internal",
-        { hostId: string },
         {
           _creationTime: number;
           _id: string;

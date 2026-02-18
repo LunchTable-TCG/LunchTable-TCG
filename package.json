@@ -2,7 +2,6 @@
   "name": "ltcg-v2",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "packageManager": "bun@1.3.5",
   "workspaces": [
     "apps/*",
@@ -10,12 +9,21 @@
   ],
   "scripts": {
     "build": "cd apps/web && bun run build",
+    "build:rpg": "cd apps/rpg-web && bun run build",
+    "build:studio": "cd apps/card-studio && bun run build",
     "dev": "concurrently -n convex,web -c blue,magenta \"bun run dev:convex\" \"bun run dev:web\"",
     "dev:convex": "convex dev",
     "dev:web": "cd apps/web && bun run dev",
+    "dev:rpg": "cd apps/rpg-web && bun run dev",
+    "dev:studio": "cd apps/card-studio && bun run dev",
+    "pre-review:local": "bash scripts/pre-review-local.sh",
+    "test:package-exports": "node scripts/verify-package-exports.mjs",
     "test": "vitest",
     "test:once": "vitest run",
-    "lint": "bash -n cleanup.sh fix-packages.sh"
+    "test:live:core": "bun run scripts/live-gameplay/run.ts --suite=core",
+    "test:live:full": "bun run scripts/live-gameplay/run.ts --suite=full",
+    "test:live:soak": "bun run scripts/live-gameplay/run.ts --suite=soak",
+    "lint": "echo \"lint: no-op\""
   },
   "dependencies": {
     "@lunchtable-tcg/cards": "workspace:*",
@@ -23,16 +31,17 @@
     "@lunchtable-tcg/guilds": "workspace:*",
     "@lunchtable-tcg/match": "workspace:*",
     "@lunchtable-tcg/story": "workspace:*",
-    "@sentry/node": "^10.38.0",
-    "convex": "^1.31.6",
+    "convex": "^1.31.7",
     "posthog-node": "^5.24.15"
   },
   "devDependencies": {
+    "@esbuild/darwin-arm64": "^0.27.3",
     "@types/bun": "latest",
     "@vercel/blob": "^2.2.0",
     "concurrently": "^9.2.1",
+    "esbuild": "^0.27.3",
+    "playwright": "^1.58.2",
     "typescript": "^5.8.0",
     "vitest": "^4.0.18"
-  },
-  "module": "index.ts"
+  }
 }

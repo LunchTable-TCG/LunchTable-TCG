@@ -40,6 +40,7 @@ export const syncUser = mutation({
     walletAddress: v.optional(v.string()),
     walletType: v.optional(v.string()),
   },
+  returns: v.id("users"),
   handler: async (ctx, args) => {
     const { privyId, identity } = await requireAuth(ctx);
     const email = args.email ?? identity.email ?? undefined;
@@ -72,6 +73,7 @@ export const syncUser = mutation({
  */
 export const currentUser = query({
   args: {},
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -83,6 +85,13 @@ export const currentUser = query({
 });
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
+
+const vOnboardingStatus = v.object({
+  exists: v.boolean(),
+  hasUsername: v.boolean(),
+  hasAvatar: v.boolean(),
+  hasStarterDeck: v.boolean(),
+});
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
 const normalizeDeckId = (deckId: string | undefined): string | null => {
   if (!deckId) return null;
@@ -97,6 +106,7 @@ const normalizeDeckId = (deckId: string | undefined): string | null => {
  */
 export const getOnboardingStatus = query({
   args: {},
+  returns: v.union(vOnboardingStatus, v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -133,6 +143,7 @@ export const getOnboardingStatus = query({
  */
 export const setUsername = mutation({
   args: { username: v.string() },
+  returns: v.object({ success: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     // Validate: 3-20 chars, alphanumeric + underscores
@@ -160,6 +171,7 @@ export const setUsername = mutation({
  */
 export const setAvatarPath = mutation({
   args: { avatarPath: v.string() },
+  returns: v.object({ success: v.boolean(), avatarPath: v.string() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const avatarPath = normalizeSignupAvatarPath(args.avatarPath);

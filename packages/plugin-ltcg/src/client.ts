@@ -16,6 +16,7 @@ import type {
   StageCompletionResult,
   StageData,
   StarterDeck,
+  StoryNextStageResponse,
   StoryProgress,
 } from "./types.js";
 
@@ -125,14 +126,11 @@ export class LTCGClient {
     return this.post("/api/agent/game/start-duel", {});
   }
 
-  /** POST /api/agent/game/join — join a waiting human match as the away player */
-  async joinMatch(matchId: string): Promise<MatchJoinResult> {
-    const result = await this.post<MatchJoinResult>("/api/agent/game/join", {
-      matchId,
-    });
-    this.matchId = result.matchId;
-    this.seat = "away";
-    return result;
+  /** POST /api/agent/game/join — join a waiting match as away player */
+  async joinMatch(
+    matchId: string,
+  ): Promise<{ matchId: string; hostId: string; mode: "pvp" | "story"; seat: "away" }> {
+    return this.post("/api/agent/game/join", { matchId });
   }
 
   /** POST /api/agent/game/action — submit a game command */
@@ -192,6 +190,11 @@ export class LTCGClient {
   /** GET /api/agent/story/progress — get full story progress */
   async getStoryProgress(): Promise<StoryProgress> {
     return this.get("/api/agent/story/progress");
+  }
+
+  /** GET /api/agent/story/next-stage — get next playable story stage */
+  async getNextStoryStage(): Promise<StoryNextStageResponse> {
+    return this.get("/api/agent/story/next-stage");
   }
 
   /** GET /api/agent/story/stage — get stage data with narrative */

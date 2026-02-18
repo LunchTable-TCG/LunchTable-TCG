@@ -77,6 +77,7 @@ export function checkStateBasedActions(state: GameState): EngineEvent[] {
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId,
           from: "hand",
+          sourceSeat: state.currentTurnPlayer,
         });
       }
     }

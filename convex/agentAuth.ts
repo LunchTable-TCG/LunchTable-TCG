@@ -1,9 +1,10 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
 import { LTCGCards } from "@lunchtable-tcg/cards";
 import { LTCGMatch } from "@lunchtable-tcg/match";
 import { createInitialState, DEFAULT_CONFIG, buildCardLookup } from "@lunchtable-tcg/engine";
+import { buildMatchSeed, makeRng } from "./agentSeed";
 import { DECK_RECIPES } from "./cardData";
 import {
   buildAIDeck,
@@ -15,34 +16,17 @@ import {
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match = new LTCGMatch(components.lunchtable_tcg_match as any);
 
-const buildDeterministicSeed = (seedInput: string): number => {
-  let hash = 2166136261;
-  for (let i = 0; i < seedInput.length; i++) {
-    hash ^= seedInput.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-const makeRng = (seed: number) => {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-const buildMatchSeed = (parts: Array<string | number | null | undefined>): number => {
-  const values = parts.map((value) => String(value ?? "")).join("|");
-  return buildDeterministicSeed(values);
-};
+const vBattleStartResult = v.object({
+  matchId: v.string(),
+  chapterId: v.string(),
+  stageNumber: v.number(),
+});
 
 // ── Agent Queries ─────────────────────────────────────────────────
 
 export const getAgentByKeyHash = query({
   args: { apiKeyHash: v.string() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     return ctx.db
       .query("agents")
@@ -59,6 +43,10 @@ export const registerAgent = mutation({
     apiKeyHash: v.string(),
     apiKeyPrefix: v.string(),
   },
+  returns: v.object({
+    agentId: v.id("agents"),
+    userId: v.id("users"),
+  }),
   handler: async (ctx, args) => {
     // Create a user record for the agent
     const userId = await ctx.db.insert("users", {
@@ -88,9 +76,10 @@ export const agentStartBattle = mutation({
     chapterId: v.string(),
     stageNumber: v.optional(v.number()),
   },
+  returns: vBattleStartResult,
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.agentUserId);
-    if (!user) throw new Error("Agent user not found");
+    if (!user) throw new ConvexError("Agent user not found");
     const stageNum = args.stageNumber ?? 1;
     const { stage } = await assertStoryStageUnlocked(
       ctx,
@@ -102,7 +91,7 @@ export const agentStartBattle = mutation({
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck = getDeckCardIdsFromDeckData(deckData);
-    if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
+    if (playerDeck.length < 30) throw new ConvexError("Deck must have at least 30 cards");
 
     const allCards = await cards.cards.getAllCards(ctx);
 
@@ -184,13 +173,14 @@ export const agentStartDuel = mutation({
   args: {
     agentUserId: v.id("users"),
   },
+  returns: v.object({ matchId: v.string() }),
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.agentUserId);
-    if (!user) throw new Error("Agent user not found");
+    if (!user) throw new ConvexError("Agent user not found");
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck = getDeckCardIdsFromDeckData(deckData);
-    if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
+    if (playerDeck.length < 30) throw new ConvexError("Deck must have at least 30 cards");
 
     const allCards = await cards.cards.getAllCards(ctx);
     const aiDeck = buildAIDeck(allCards);
@@ -248,6 +238,7 @@ export const agentJoinMatch = mutation({
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.agentUserId);
     if (!user) throw new Error("Agent user not found");
+    const agentUserId = String(args.agentUserId);
 
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     if (!meta) throw new Error("Match not found");
@@ -266,7 +257,7 @@ export const agentJoinMatch = mutation({
     if (!hostId) {
       throw new Error("Match is missing a host player.");
     }
-    if (hostId === args.agentUserId) {
+    if (hostId === agentUserId) {
       throw new Error("Cannot join your own match as away player.");
     }
 
@@ -288,7 +279,7 @@ export const agentJoinMatch = mutation({
     const seed = buildMatchSeed([
       "agentJoinMatch",
       hostId,
-      args.agentUserId,
+      agentUserId,
       firstPlayer,
       hostDeck.length,
       awayDeck.length,
@@ -300,7 +291,7 @@ export const agentJoinMatch = mutation({
       cardLookup,
       DEFAULT_CONFIG,
       hostId,
-      args.agentUserId,
+      agentUserId,
       hostDeck,
       awayDeck,
       firstPlayer,
@@ -309,7 +300,7 @@ export const agentJoinMatch = mutation({
 
     await match.joinMatch(ctx, {
       matchId: args.matchId,
-      awayId: args.agentUserId,
+      awayId: agentUserId,
       awayDeck,
     });
 
@@ -335,9 +326,13 @@ export const agentSelectStarterDeck = mutation({
     agentUserId: v.id("users"),
     deckCode: v.string(),
   },
+  returns: v.object({
+    deckId: v.string(),
+    cardCount: v.number(),
+  }),
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.agentUserId);
-    if (!user) throw new Error("Agent user not found");
+    if (!user) throw new ConvexError("Agent user not found");
 
     const existingDecks = await cards.decks.getUserDecks(ctx, user._id);
     if (existingDecks && existingDecks.length > 0) {
@@ -366,7 +361,7 @@ export const agentSelectStarterDeck = mutation({
     }
 
     const recipe = DECK_RECIPES[args.deckCode];
-    if (!recipe) throw new Error(`Unknown deck code: ${args.deckCode}`);
+    if (!recipe) throw new ConvexError(`Unknown deck code: ${args.deckCode}`);
 
     const allCards = await cards.cards.getAllCards(ctx);
     const byName = new Map<string, any>();
@@ -375,7 +370,7 @@ export const agentSelectStarterDeck = mutation({
     const resolvedCards: { cardDefinitionId: string; quantity: number }[] = [];
     for (const entry of recipe) {
       const cardDef = byName.get(entry.cardName);
-      if (!cardDef) throw new Error(`Card not found: "${entry.cardName}"`);
+      if (!cardDef) throw new ConvexError(`Card not found: "${entry.cardName}"`);
       resolvedCards.push({ cardDefinitionId: cardDef._id, quantity: entry.copies });
     }
 

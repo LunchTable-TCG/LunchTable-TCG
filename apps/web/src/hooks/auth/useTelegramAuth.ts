@@ -1,16 +1,15 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useRef } from "react";
-import { apiAny, useConvexMutation } from "../../lib/convexHelpers";
+import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
+import { isTelegramMiniApp as detectTelegramMiniApp } from "@/lib/clientPlatform";
+import { apiAny, useConvexMutation } from "@/lib/convexHelpers";
 
 /**
  * Detect if running inside a Telegram mini app.
  * Checks for Telegram WebApp object or URL hash params.
  */
 export function isTelegramMiniApp(): boolean {
-  if (typeof window === "undefined") return false;
-  // Telegram injects this on the window object inside mini apps
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return !!(window as any).Telegram?.WebApp?.initData;
+  return detectTelegramMiniApp();
 }
 
 /**
@@ -25,6 +24,10 @@ export function isTelegramMiniApp(): boolean {
  * initiated from within Telegram."
  */
 export function useTelegramAuth() {
+  if (!PRIVY_ENABLED) {
+    return { isTelegram: false };
+  }
+
   const { authenticated, user, linkTelegram } = usePrivy();
   const linkTelegramFromMiniApp = useConvexMutation(apiAny.telegram.linkTelegramFromMiniApp);
   const linked = useRef(false);

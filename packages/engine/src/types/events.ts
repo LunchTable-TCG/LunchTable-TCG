@@ -26,9 +26,9 @@ export type EngineEvent =
   | { type: "DAMAGE_DEALT"; seat: Seat; amount: number; isBattle: boolean }
   | { type: "BATTLE_RESOLVED"; attackerId: string; defenderId: string | null; result: "win" | "lose" | "draw" }
   | { type: "CARD_DESTROYED"; cardId: string; reason: "battle" | "effect" | "breakdown" }
-  | { type: "CARD_BANISHED"; cardId: string; from: string }
-  | { type: "CARD_RETURNED_TO_HAND"; cardId: string; from: string }
-  | { type: "CARD_SENT_TO_GRAVEYARD"; cardId: string; from: string }
+  | { type: "CARD_BANISHED"; cardId: string; from: string; sourceSeat?: Seat }
+  | { type: "CARD_RETURNED_TO_HAND"; cardId: string; from: string; sourceSeat?: Seat }
+  | { type: "CARD_SENT_TO_GRAVEYARD"; cardId: string; from: string; sourceSeat?: Seat }
   | { type: "VICE_COUNTER_ADDED"; cardId: string; newCount: number }
   | { type: "VICE_COUNTER_REMOVED"; cardId: string; newCount: number }
   | { type: "BREAKDOWN_TRIGGERED"; seat: Seat; cardId: string }

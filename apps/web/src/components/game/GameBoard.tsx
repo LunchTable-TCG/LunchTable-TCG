@@ -19,6 +19,39 @@ import type { Phase } from "./types";
 
 const MAX_BOARD_SLOTS = 3;
 const MAX_SPELL_TRAP_SLOTS = 3;
+const FRAME_MS = 1000 / 60;
+
+type LaneSnapshot = {
+  lane: number;
+  occupied: boolean;
+  cardId?: string;
+  definitionId?: string;
+  name?: string;
+  position?: "attack" | "defense";
+  faceDown?: boolean;
+  canAttack?: boolean;
+  hasAttackedThisTurn?: boolean;
+  attack?: number;
+  defense?: number;
+  viceCounters?: number;
+};
+
+type SpellTrapLaneSnapshot = {
+  lane: number;
+  occupied: boolean;
+  cardId?: string;
+  definitionId?: string;
+  name?: string;
+  faceDown?: boolean;
+  activated?: boolean;
+};
+
+declare global {
+  interface Window {
+    render_game_to_text?: () => string;
+    advanceTime?: (ms: number) => Promise<void>;
+  }
+}
 
 interface GameBoardProps {
   matchId: string;
@@ -60,8 +93,17 @@ export function GameBoard({
   const matchEndNotifiedRef = useRef(false);
   const pendingMatchEndRef = useRef(onMatchEnd);
 
-  const isChainPromptOpen = Boolean(openPrompt);
+  const isCanonicalChainPromptOpen =
+    (view?.currentChain?.length ?? 0) > 0 &&
+    view?.currentPriorityPlayer === view?.mySeat;
+  const isChainPromptOpen = isCanonicalChainPromptOpen || Boolean(openPrompt);
   const chainData = (openPrompt?.data ?? {}) as Record<string, unknown>;
+  const activeChainLink =
+    isCanonicalChainPromptOpen && Array.isArray(view?.currentChain) && view.currentChain.length > 0
+      ? view.currentChain[view.currentChain.length - 1]
+      : null;
+  const maxBoardSlots = view?.maxBoardSlots ?? MAX_BOARD_SLOTS;
+  const maxSpellTrapSlots = view?.maxSpellTrapSlots ?? MAX_SPELL_TRAP_SLOTS;
   const playerSeat = view?.mySeat;
   const playerLP = view?.lifePoints ?? 0;
   const opponentLP = view?.opponentLifePoints ?? 0;
@@ -81,6 +123,17 @@ export function GameBoard({
   pendingMatchEndRef.current = onMatchEnd;
 
   const chainOpponentCardName = (() => {
+    if (activeChainLink?.cardId) {
+      const cardInZones =
+        view?.board?.find((c: any) => c.cardId === activeChainLink.cardId) ??
+        view?.spellTrapZone?.find((c: any) => c.cardId === activeChainLink.cardId) ??
+        view?.opponentBoard?.find((c: any) => c.cardId === activeChainLink.cardId) ??
+        view?.opponentSpellTrapZone?.find((c: any) => c.cardId === activeChainLink.cardId);
+      const definitionId = cardInZones?.definitionId ?? activeChainLink.cardId;
+      const definition = cardLookup[definitionId];
+      if (definition?.name) return definition.name;
+    }
+
     const directName = chainData.opponentCardName;
     if (typeof directName === "string" && directName.trim()) return directName;
 
@@ -115,6 +168,18 @@ export function GameBoard({
   })();
 
   const chainActivatableTraps = (() => {
+    if (isCanonicalChainPromptOpen && Array.isArray(view?.spellTrapZone)) {
+      return view.spellTrapZone
+        .filter((card: any) => card?.faceDown)
+        .map((card: any) => {
+          const definition = cardLookup[card.definitionId];
+          if (!definition) return null;
+          if (definition.type !== "trap" && definition.cardType !== "trap") return null;
+          return { cardId: card.cardId, name: "Set Trap" };
+        })
+        .filter((entry): entry is { cardId: string; name: string } => Boolean(entry));
+    }
+
     let rawTraps = chainData.activatableTraps;
     if (!Array.isArray(rawTraps)) {
       rawTraps = chainData.activatableTrapIds;
@@ -360,6 +425,181 @@ export function GameBoard({
     });
   }, [ended, playerSeat, result, winner, playerLP, opponentLP]);
 
+  // Extract field data from view (safe defaults keep hook order stable before early returns)
+  const playerBoard = view?.board ?? [];
+  const opponentBoard = view?.opponentBoard ?? [];
+  const playerSpellTraps = view?.spellTrapZone ?? [];
+  const opponentSpellTraps = view?.opponentSpellTrapZone ?? [];
+  const hand = view?.hand ?? [];
+  const playerGraveyard = view?.graveyard ?? [];
+  const playerBanished = view?.banished ?? [];
+  const opponentGraveyard = view?.opponentGraveyard ?? [];
+  const opponentBanished = view?.opponentBanished ?? [];
+
+  const renderGameToText = useCallback(() => {
+    if (!view) {
+      return JSON.stringify({
+        mode: "ltcg_play_match",
+        match: {
+          matchId,
+          seat,
+          status: meta?.status ?? "unknown",
+          loading: isLoading,
+          notFound,
+        },
+      });
+    }
+
+    const payload = {
+      mode: "ltcg_play_match",
+      coordinateSystem: {
+        boardLaneIndex: "0..2 left-to-right from the local player's perspective",
+        spellTrapLaneIndex: "0..2 left-to-right from the local player's perspective",
+      },
+      match: {
+        matchId,
+        seat,
+        mySeat: playerSeat ?? null,
+        status: meta?.status ?? "unknown",
+        phase,
+        turnNumber: view.turnNumber,
+        isMyTurn,
+        latestSnapshotVersion: latestSnapshotVersion ?? null,
+      },
+      player: {
+        lifePoints: playerLP,
+        deckCount: view.deckCount,
+        handCount: hand.length,
+        hand: hand.map((cardId, handIndex) => ({
+          handIndex,
+          cardId,
+          name: cardLookup[cardId]?.name ?? "Unknown",
+          playable: playableIds.has(cardId),
+        })),
+        board: serializeBoardLanes(playerBoard, cardLookup, MAX_BOARD_SLOTS),
+        spellTrapZone: serializeSpellTrapLanes(playerSpellTraps, cardLookup, MAX_SPELL_TRAP_SLOTS),
+        graveyardCount: playerGraveyard.length,
+        banishedCount: playerBanished.length,
+      },
+      opponent: {
+        lifePoints: opponentLP,
+        deckCount: view.opponentDeckCount,
+        handCount: view.opponentHandCount,
+        board: serializeBoardLanes(opponentBoard, cardLookup, MAX_BOARD_SLOTS),
+        spellTrapZone: serializeSpellTrapLanes(opponentSpellTraps, cardLookup, MAX_SPELL_TRAP_SLOTS),
+        graveyardCount: opponentGraveyard.length,
+        banishedCount: opponentBanished.length,
+      },
+      chain: {
+        promptOpen: isChainPromptOpen,
+        promptType: openPrompt?.promptType ?? null,
+        chainDepth: view.currentChain.length,
+        activatableTrapCount: chainActivatableTraps.length,
+      },
+      actions: {
+        canEndTurn: isMyTurn && !actions.submitting && !isChainPromptOpen,
+        canSurrender: !actions.submitting && !isChainPromptOpen,
+        actionCounts: {
+          summon: validActions.canSummon.size,
+          setMonster: validActions.canSetMonster.size,
+          setSpellTrap: validActions.canSetSpellTrap.size,
+          activateSpell: validActions.canActivateSpell.size,
+          activateTrap: validActions.canActivateTrap.size,
+          canAttackWith: validActions.canAttack.size,
+          flipSummon: validActions.canFlipSummon.size,
+        },
+      },
+      overlays: {
+        actionSheetOpen: showActionSheet,
+        tributeSelectorOpen: showTributeSelector,
+        attackTargetSelectorOpen: showAttackTargets,
+        graveyardBrowserOpen: showGraveyard
+          ? `${showGraveyard.owner}:${showGraveyard.zone}`
+          : null,
+        surrenderConfirmOpen: showSurrenderConfirm,
+      },
+      result: {
+        ended,
+        winner: winner ?? null,
+        outcome: result,
+      },
+    };
+
+    return JSON.stringify(payload);
+  }, [
+    actions.submitting,
+    cardLookup,
+    chainActivatableTraps.length,
+    ended,
+    hand,
+    isChainPromptOpen,
+    isLoading,
+    isMyTurn,
+    latestSnapshotVersion,
+    matchId,
+    meta?.status,
+    notFound,
+    openPrompt?.promptType,
+    opponentBanished.length,
+    opponentBoard,
+    opponentGraveyard.length,
+    opponentLP,
+    opponentSpellTraps,
+    phase,
+    playableIds,
+    playerBanished.length,
+    playerBoard,
+    playerGraveyard.length,
+    playerLP,
+    playerSeat,
+    playerSpellTraps,
+    result,
+    seat,
+    showActionSheet,
+    showAttackTargets,
+    showGraveyard,
+    showSurrenderConfirm,
+    showTributeSelector,
+    validActions.canActivateSpell.size,
+    validActions.canActivateTrap.size,
+    validActions.canAttack.size,
+    validActions.canFlipSummon.size,
+    validActions.canSetMonster.size,
+    validActions.canSetSpellTrap.size,
+    validActions.canSummon.size,
+    view,
+    winner,
+  ]);
+
+  useEffect(() => {
+    window.render_game_to_text = renderGameToText;
+    return () => {
+      if (window.render_game_to_text === renderGameToText) {
+        delete window.render_game_to_text;
+      }
+    };
+  }, [renderGameToText]);
+
+  useEffect(() => {
+    const advance = async (ms: number) => {
+      const safeMs = Number.isFinite(ms) && ms > 0 ? ms : FRAME_MS;
+      const steps = Math.max(1, Math.round(safeMs / FRAME_MS));
+      for (let index = 0; index < steps; index += 1) {
+        await new Promise<void>((resolve) => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      }
+    };
+
+    window.advanceTime = advance;
+
+    return () => {
+      if (window.advanceTime === advance) {
+        delete window.advanceTime;
+      }
+    };
+  }, []);
+
   // Loading/error states
   if (isLoading) {
     return (
@@ -404,21 +644,10 @@ export function GameBoard({
     );
   }
 
-  // Extract field data from view
-  const playerBoard = view.board ?? [];
-  const opponentBoard = view.opponentBoard ?? [];
-  const playerSpellTraps = view.spellTrapZone ?? [];
-  const opponentSpellTraps = view.opponentSpellTrapZone ?? [];
-  const hand = view.hand ?? [];
-  const playerGraveyard = view.graveyard ?? [];
-  const playerBanished = view.banished ?? [];
-  const opponentGraveyard = view.opponentGraveyard ?? [];
-  const opponentBanished = view.opponentBanished ?? [];
-
   return (
-    <div className="relative h-screen flex flex-col bg-[#fdfdfb]">
+    <div className="relative h-screen overflow-hidden bg-[#fdfdfb]">
       <GameMotionOverlay phase={phase as Phase} isMyTurn={isMyTurn} />
-
+      <div className="relative z-10 flex h-full flex-col">
       {/* Opponent LP Bar */}
       <div className="px-4 pt-2">
         <LPBar
@@ -435,12 +664,12 @@ export function GameBoard({
           <FieldRow
             cards={opponentBoard}
             cardLookup={cardLookup}
-            maxSlots={MAX_BOARD_SLOTS}
+            maxSlots={maxBoardSlots}
             reversed
           />
           {/* Spell/Trap row — cast to BoardCard-like shape */}
           <div className="flex gap-1 justify-center">
-            {Array.from({ length: MAX_SPELL_TRAP_SLOTS }).map((_, i) => {
+            {Array.from({ length: maxSpellTrapSlots }).map((_, i) => {
               const st = opponentSpellTraps[i];
               return (
                 <div
@@ -473,13 +702,13 @@ export function GameBoard({
           <FieldRow
             cards={playerBoard}
             cardLookup={cardLookup}
-            maxSlots={MAX_BOARD_SLOTS}
+            maxSlots={maxBoardSlots}
             highlightIds={new Set([...attackableIds, ...flipSummonIds])}
             onSlotClick={handleBoardCardClick}
           />
           {/* Spell/Trap row */}
           <div className="flex gap-1 justify-center">
-            {Array.from({ length: MAX_SPELL_TRAP_SLOTS }).map((_, i) => {
+            {Array.from({ length: maxSpellTrapSlots }).map((_, i) => {
               const st = playerSpellTraps[i];
               return (
                 <div
@@ -712,6 +941,75 @@ export function GameBoard({
           onClose={() => setShowGraveyard(null)}
         />
       )}
+      </div>
     </div>
   );
+}
+
+function serializeBoardLanes(
+  cards: Array<{
+    cardId: string;
+    definitionId: string;
+    position?: "attack" | "defense";
+    faceDown?: boolean;
+    canAttack?: boolean;
+    hasAttackedThisTurn?: boolean;
+    viceCounters?: number;
+    temporaryBoosts?: {
+      attack?: number;
+      defense?: number;
+    };
+  }>,
+  cardLookup: Record<string, { name: string; attack?: number; defense?: number }>,
+  laneCount: number,
+): LaneSnapshot[] {
+  return Array.from({ length: laneCount }, (_, lane) => {
+    const card = cards[lane];
+    if (!card) return { lane, occupied: false };
+
+    const definition = cardLookup[card.definitionId];
+    const attack = (definition?.attack ?? 0) + (card.temporaryBoosts?.attack ?? 0);
+    const defense = (definition?.defense ?? 0) + (card.temporaryBoosts?.defense ?? 0);
+
+    return {
+      lane,
+      occupied: true,
+      cardId: card.cardId,
+      definitionId: card.definitionId,
+      name: definition?.name ?? "Unknown",
+      position: card.position ?? "attack",
+      faceDown: Boolean(card.faceDown),
+      canAttack: Boolean(card.canAttack),
+      hasAttackedThisTurn: Boolean(card.hasAttackedThisTurn),
+      attack,
+      defense,
+      viceCounters: card.viceCounters ?? 0,
+    };
+  });
+}
+
+function serializeSpellTrapLanes(
+  cards: Array<{
+    cardId: string;
+    definitionId: string;
+    faceDown?: boolean;
+    activated?: boolean;
+  }>,
+  cardLookup: Record<string, { name: string }>,
+  laneCount: number,
+): SpellTrapLaneSnapshot[] {
+  return Array.from({ length: laneCount }, (_, lane) => {
+    const card = cards[lane];
+    if (!card) return { lane, occupied: false };
+
+    return {
+      lane,
+      occupied: true,
+      cardId: card.cardId,
+      definitionId: card.definitionId,
+      name: cardLookup[card.definitionId]?.name ?? "Set Spell/Trap",
+      faceDown: Boolean(card.faceDown),
+      activated: Boolean(card.activated),
+    };
+  });
 }

@@ -88,6 +88,51 @@ function setTrapInZone(state: GameState, seat: "host" | "away", cardId: string, 
 }
 
 describe("chain system", () => {
+  it("trap effects resolve only after chain resolution", () => {
+    let state = makeState({
+      currentPhase: "main",
+      currentTurnPlayer: "host",
+      awayLifePoints: 8000,
+    });
+    state = setTrapInZone(state, "host", "trap2", "trap2");
+
+    const activateEvents = decide(
+      state,
+      { type: "ACTIVATE_TRAP", cardId: "trap2", targets: [] },
+      "host",
+    );
+    expect(activateEvents.map((event) => event.type)).toEqual([
+      "CHAIN_STARTED",
+      "CHAIN_LINK_ADDED",
+      "TRAP_ACTIVATED",
+    ]);
+
+    state = evolve(state, activateEvents);
+    expect(state.awayLifePoints).toBe(8000);
+    expect(state.currentPriorityPlayer).toBe("away");
+
+    const awayPassEvents = decide(
+      state,
+      { type: "CHAIN_RESPONSE", pass: true },
+      "away",
+    );
+    state = evolve(state, awayPassEvents);
+    expect(state.currentChainPasser).toBe("away");
+
+    const hostPassEvents = decide(
+      state,
+      { type: "CHAIN_RESPONSE", pass: true },
+      "host",
+    );
+    expect(hostPassEvents.some((event) => event.type === "CHAIN_RESOLVED")).toBe(true);
+    expect(hostPassEvents.some((event) => event.type === "DAMAGE_DEALT")).toBe(true);
+
+    state = evolve(state, hostPassEvents);
+    expect(state.awayLifePoints).toBe(7500);
+    expect(state.currentChain).toHaveLength(0);
+    expect(state.currentPriorityPlayer).toBeNull();
+  });
+
   it("CHAIN_RESPONSE with pass emits CHAIN_PASSED", () => {
     let state = makeState({
       currentPhase: "main",

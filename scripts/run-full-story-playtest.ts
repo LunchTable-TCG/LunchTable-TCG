@@ -428,7 +428,8 @@ async function main() {
   });
   console.log("Registered agent:", reg);
 
-  await ensureStarterDeck(reg.userId);
+  // Convex id("users") values are structurally strings at runtime; keep this script runtime-focused.
+  await ensureStarterDeck(String(reg.userId));
 
   const chapters = await convex.query(api.game.getChapters, {});
   if (!chapters || chapters.length === 0) throw new Error("No chapter found");
@@ -591,7 +592,7 @@ async function main() {
       {
         matchId,
         outcome: finalStoryContext?.outcome ?? (won ? "won" : "lost"),
-        turns,
+        turns: turnCount,
         steps,
         stars: finalStoryContext?.starsEarned ?? parseOutcome(finalMeta as Record<string, any> | null, finalView, finalStory).stars,
         rewards: {

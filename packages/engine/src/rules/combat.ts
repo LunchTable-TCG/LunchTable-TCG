@@ -172,6 +172,7 @@ export function decideDeclareAttack(
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId: targetId,
           from: "board",
+          sourceSeat: opponentSeat(seat),
         });
 
         // Deal damage difference
@@ -200,6 +201,7 @@ export function decideDeclareAttack(
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId: attackerId,
           from: "board",
+          sourceSeat: seat,
         });
 
         // Deal damage difference
@@ -228,6 +230,7 @@ export function decideDeclareAttack(
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId: attackerId,
           from: "board",
+          sourceSeat: seat,
         });
         events.push({
           type: "CARD_DESTROYED",
@@ -238,6 +241,7 @@ export function decideDeclareAttack(
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId: targetId,
           from: "board",
+          sourceSeat: opponentSeat(seat),
         });
 
         events.push({
@@ -260,6 +264,7 @@ export function decideDeclareAttack(
           type: "CARD_SENT_TO_GRAVEYARD",
           cardId: targetId,
           from: "board",
+          sourceSeat: opponentSeat(seat),
         });
 
         events.push({

@@ -68,6 +68,7 @@ export function checkBreakdowns(state: GameState): EngineEvent[] {
         type: "CARD_SENT_TO_GRAVEYARD",
         cardId: card.cardId,
         from: "board",
+        sourceSeat: "host",
       });
     }
   }
@@ -89,6 +90,7 @@ export function checkBreakdowns(state: GameState): EngineEvent[] {
         type: "CARD_SENT_TO_GRAVEYARD",
         cardId: card.cardId,
         from: "board",
+        sourceSeat: "away",
       });
     }
   }

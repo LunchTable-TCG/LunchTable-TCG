@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy } from "@privy-io/react-auth";
+import { useConvexAuth } from "convex/react";
 import { motion, type Variants } from "framer-motion";
 import {
   Crown,
@@ -169,6 +170,7 @@ function CliquesSkeleton() {
 export function Cliques() {
   const navigate = useNavigate();
   const { authenticated } = usePrivy();
+  const { isAuthenticated: convexAuthenticated } = useConvexAuth();
 
   const [assigning, setAssigning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -178,7 +180,7 @@ export function Cliques() {
 
   const dashboard = useConvexQuery(
     apiAny.cliques.getCliqueDashboard,
-    authenticated ? {} : "skip",
+    authenticated && convexAuthenticated ? {} : "skip",
   ) as CliqueDashboard | undefined;
 
   const ensureMyCliqueAssignment = useConvexMutation(
@@ -189,7 +191,7 @@ export function Cliques() {
   const myArchetype = dashboard?.myArchetype ?? null;
 
   useEffect(() => {
-    if (!authenticated || !dashboard) return;
+    if (!authenticated || !convexAuthenticated || !dashboard) return;
 
     if (myClique) {
       attemptedAutoAssign.current = false;
@@ -216,7 +218,14 @@ export function Cliques() {
       .finally(() => {
         setAssigning(false);
       });
-  }, [authenticated, dashboard, ensureMyCliqueAssignment, myArchetype, myClique]);
+  }, [
+    authenticated,
+    convexAuthenticated,
+    dashboard,
+    ensureMyCliqueAssignment,
+    myArchetype,
+    myClique,
+  ]);
 
   const myRank = useMemo(() => {
     if (!dashboard?.leaderboard?.length) return null;

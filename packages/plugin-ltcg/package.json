@@ -50,27 +50,5 @@
         "required": false
       }
     }
-  },
-  "elizaos": {
-    "kind": "app",
-    "app": {
-      "displayName": "LunchTable: School of Hard Knocks",
-      "category": "game",
-      "launchType": "connect",
-      "launchUrl": "http://localhost:3334",
-      "icon": null,
-      "capabilities": ["observe", "control", "story-mode", "pvp"],
-      "minPlayers": 1,
-      "maxPlayers": 2,
-      "viewer": {
-        "url": "http://localhost:3334",
-        "embedParams": {
-          "embedded": "true",
-          "mode": "play"
-        },
-        "postMessageAuth": true,
-        "sandbox": "allow-scripts allow-same-origin allow-popups allow-forms"
-      }
-    }
   }
 }

@@ -192,6 +192,7 @@ describe("Combat", () => {
       type: "CARD_SENT_TO_GRAVEYARD",
       cardId: "monster1",
       from: "board",
+      sourceSeat: "away",
     });
     expect(events[3]).toEqual({
       type: "DAMAGE_DEALT",
@@ -253,6 +254,7 @@ describe("Combat", () => {
       type: "CARD_SENT_TO_GRAVEYARD",
       cardId: "weakMonster",
       from: "board",
+      sourceSeat: "host",
     });
     expect(events[3]).toEqual({
       type: "DAMAGE_DEALT",
@@ -316,6 +318,7 @@ describe("Combat", () => {
       type: "CARD_SENT_TO_GRAVEYARD",
       cardId: "monster1",
       from: "board",
+      sourceSeat: "host",
     });
     expect(events[3]).toEqual({
       type: "CARD_DESTROYED",
@@ -326,6 +329,7 @@ describe("Combat", () => {
       type: "CARD_SENT_TO_GRAVEYARD",
       cardId: "monster3",
       from: "board",
+      sourceSeat: "away",
     });
     expect(events[5]).toEqual({
       type: "BATTLE_RESOLVED",
@@ -384,6 +388,7 @@ describe("Combat", () => {
       type: "CARD_SENT_TO_GRAVEYARD",
       cardId: "monster1",
       from: "board",
+      sourceSeat: "away",
     });
     expect(events[3]).toEqual({
       type: "BATTLE_RESOLVED",

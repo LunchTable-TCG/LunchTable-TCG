@@ -49,9 +49,6 @@ export function Profile() {
 
   const userDeckCount = useMemo(() => decks?.length ?? 0, [decks]);
   const hasDecks = decks !== undefined;
-  const joinedOn = formatJoinedTime(currentUser?.createdAt);
-  const displayName = currentUser?.name || currentUser?.username || "Player";
-  const avatarUrl = blob(currentUser?.avatarPath ?? DEFAULT_SIGNUP_AVATAR_PATH);
 
   if (currentUser === undefined) {
     return (
@@ -89,6 +86,10 @@ export function Profile() {
       </div>
     );
   }
+
+  const joinedOn = formatJoinedTime(currentUser.createdAt);
+  const displayName = currentUser.name || currentUser.username || "Player";
+  const avatarUrl = blob(currentUser.avatarPath ?? DEFAULT_SIGNUP_AVATAR_PATH);
 
   return (
     <main className="min-h-screen bg-[#fdfdfb] px-4 py-10 pb-24">
@@ -131,7 +132,7 @@ export function Profile() {
                 className="text-3xl md:text-4xl mb-2"
                 style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
               >
-                {currentUser.username}
+                {displayName}
               </h2>
               {currentUser.name ? (
                 <p

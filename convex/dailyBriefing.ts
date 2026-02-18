@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 
 // ── Campaign Timeline ─────────────────────────────────────────────
@@ -452,10 +452,83 @@ const CAMPAIGN_WEEKS: WeekData[] = [
   },
 ];
 
+const vCampaignState = v.object({
+  _id: v.id("campaignState"),
+  _creationTime: v.number(),
+  weekNumber: v.number(),
+  dayOfWeek: v.number(),
+  actNumber: v.number(),
+  isActive: v.boolean(),
+  startedAt: v.number(),
+  lastAdvancedAt: v.number(),
+});
+const vCampaignModifiers = v.object({
+  global: v.string(),
+  vice: v.string(),
+  reputation: v.string(),
+  stability: v.string(),
+  special: v.string(),
+});
+const vDailyBriefingInactive = v.object({
+  active: v.literal(false),
+  message: v.string(),
+});
+const vDailyBriefingActive = v.object({
+  active: v.literal(true),
+  weekNumber: v.number(),
+  dayOfWeek: v.number(),
+  actNumber: v.number(),
+  actName: v.string(),
+  chapterNumber: v.number(),
+  event: v.string(),
+  narrativeBeat: v.string(),
+  announcement: v.string(),
+  dailyPrompt: v.string(),
+  modifiers: vCampaignModifiers,
+  environment: v.string(),
+  bossTrigger: v.string(),
+});
+const vDailyBriefing = v.union(vDailyBriefingInactive, vDailyBriefingActive);
+const vAgentDailyBriefingInactive = v.object({
+  active: v.literal(false),
+  checkedIn: v.literal(false),
+  message: v.string(),
+});
+const vAgentDailyBriefingActive = v.object({
+  active: v.literal(true),
+  checkedIn: v.boolean(),
+  weekNumber: v.number(),
+  dayOfWeek: v.number(),
+  actNumber: v.number(),
+  actName: v.string(),
+  chapterNumber: v.number(),
+  event: v.string(),
+  narrativeBeat: v.string(),
+  announcement: v.string(),
+  dailyPrompt: v.string(),
+  modifiers: vCampaignModifiers,
+  environment: v.string(),
+  bossTrigger: v.string(),
+});
+const vAgentDailyBriefing = v.union(vAgentDailyBriefingInactive, vAgentDailyBriefingActive);
+const vCheckinResult = v.object({
+  checkedIn: v.boolean(),
+  message: v.string(),
+});
+const vInitCampaignResult = v.object({
+  status: v.union(v.literal("already_initialized"), v.literal("initialized")),
+  weekNumber: v.number(),
+});
+const vSetCampaignDayResult = v.object({
+  weekNumber: v.number(),
+  dayOfWeek: v.number(),
+});
+
 // ── Queries ───────────────────────────────────────────────────────
 
 export const getCampaignState = query({
   args: {},
+  returns: v.union(vCampaignState, v.null()),
   handler: async (ctx) => {
     return ctx.db.query("campaignState").first();
   },
@@ -463,11 +536,12 @@ export const getCampaignState = query({
 
 export const getDailyBriefing = query({
   args: {},
+  returns: vDailyBriefing,
   handler: async (ctx) => {
     const state = await ctx.db.query("campaignState").first();
     if (!state || !state.isActive) {
       return {
-        active: false,
+        active: false as const,
         message: "Campaign has not started yet.",
       };
     }
@@ -475,16 +549,19 @@ export const getDailyBriefing = query({
     const week = CAMPAIGN_WEEKS[state.weekNumber - 1];
     if (!week) {
       return {
-        active: false,
+        active: false as const,
         message: "Campaign has ended.",
       };
     }
 
     const dayIndex = Math.min(state.dayOfWeek - 1, week.dailyPrompts.length - 1);
-    const dailyPrompt = week.dailyPrompts[dayIndex] ?? week.dailyPrompts[0];
+    const dailyPrompt =
+      week.dailyPrompts[dayIndex] ??
+      week.dailyPrompts[0] ??
+      "No daily prompt set.";
 
     return {
-      active: true,
+      active: true as const,
       weekNumber: state.weekNumber,
       dayOfWeek: state.dayOfWeek,
       actNumber: week.actNumber,
@@ -503,12 +580,13 @@ export const getDailyBriefing = query({
 
 export const getAgentDailyBriefing = query({
   args: { agentId: v.id("agents"), userId: v.id("users") },
+  returns: vAgentDailyBriefing,
   handler: async (ctx, args) => {
     const state = await ctx.db.query("campaignState").first();
     if (!state || !state.isActive) {
       return {
-        active: false,
-        checkedIn: false,
+        active: false as const,
+        checkedIn: false as const,
         message: "Campaign has not started yet.",
       };
     }
@@ -516,8 +594,8 @@ export const getAgentDailyBriefing = query({
     const week = CAMPAIGN_WEEKS[state.weekNumber - 1];
     if (!week) {
       return {
-        active: false,
-        checkedIn: false,
+        active: false as const,
+        checkedIn: false as const,
         message: "Campaign has ended.",
       };
     }
@@ -534,10 +612,13 @@ export const getAgentDailyBriefing = query({
       .first();
 
     const dayIndex = Math.min(state.dayOfWeek - 1, week.dailyPrompts.length - 1);
-    const dailyPrompt = week.dailyPrompts[dayIndex] ?? week.dailyPrompts[0];
+    const dailyPrompt =
+      week.dailyPrompts[dayIndex] ??
+      week.dailyPrompts[0] ??
+      "No daily prompt set.";
 
     return {
-      active: true,
+      active: true as const,
       checkedIn: !!existing,
       weekNumber: state.weekNumber,
       dayOfWeek: state.dayOfWeek,
@@ -559,6 +640,7 @@ export const getAgentDailyBriefing = query({
 
 export const agentCheckin = mutation({
   args: { agentId: v.id("agents"), userId: v.id("users") },
+  returns: vCheckinResult,
   handler: async (ctx, args) => {
     const state = await ctx.db.query("campaignState").first();
     if (!state || !state.isActive) {
@@ -596,11 +678,12 @@ export const agentCheckin = mutation({
 
 export const initCampaign = mutation({
   args: {},
+  returns: vInitCampaignResult,
   handler: async (ctx) => {
     // Check if already initialized
     const existing = await ctx.db.query("campaignState").first();
     if (existing) {
-      return { status: "already_initialized", weekNumber: existing.weekNumber };
+      return { status: "already_initialized" as const, weekNumber: existing.weekNumber };
     }
 
     await ctx.db.insert("campaignState", {
@@ -612,15 +695,16 @@ export const initCampaign = mutation({
       lastAdvancedAt: Date.now(),
     });
 
-    return { status: "initialized", weekNumber: 1 };
+    return { status: "initialized" as const, weekNumber: 1 };
   },
 });
 
 export const advanceCampaignDay = internalMutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     const state = await ctx.db.query("campaignState").first();
-    if (!state || !state.isActive) return;
+    if (!state || !state.isActive) return null;
 
     let { weekNumber, dayOfWeek } = state;
 
@@ -635,7 +719,7 @@ export const advanceCampaignDay = internalMutation({
     // Campaign over after week 16
     if (weekNumber > 16) {
       await ctx.db.patch(state._id, { isActive: false });
-      return;
+      return null;
     }
 
     const week = CAMPAIGN_WEEKS[weekNumber - 1];
@@ -647,18 +731,20 @@ export const advanceCampaignDay = internalMutation({
       actNumber,
       lastAdvancedAt: Date.now(),
     });
+    return null;
   },
 });
 
 // Admin override to jump to a specific week/day
 export const setCampaignDay = mutation({
   args: { weekNumber: v.number(), dayOfWeek: v.number() },
+  returns: vSetCampaignDayResult,
   handler: async (ctx, args) => {
     if (args.weekNumber < 1 || args.weekNumber > 16) {
-      throw new Error("weekNumber must be 1–16");
+      throw new ConvexError("weekNumber must be 1-16");
     }
     if (args.dayOfWeek < 1 || args.dayOfWeek > 5) {
-      throw new Error("dayOfWeek must be 1–5");
+      throw new ConvexError("dayOfWeek must be 1-5");
     }
 
     const state = await ctx.db.query("campaignState").first();

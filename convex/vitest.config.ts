@@ -1,7 +1,12 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: {
-    include: ["**/*.{test,spec}.{js,ts}"],
-  },
+	resolve: {
+		// Convex components expose source entrypoints under this export condition,
+		// avoiding a dist build requirement for tests.
+		conditions: ["@convex-dev/component-source", "import", "module", "default"],
+	},
+	test: {
+		include: ["convex/**/*.test.ts"],
+	},
 });

@@ -1,0 +1,37 @@
+import path from "path";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  resolve: {
+    // Convex components expose source entrypoints under this export condition,
+    // avoiding a dist build requirement for tests.
+    conditions: ["@convex-dev/component-source", "import", "module", "default"],
+    alias: {
+      "@": path.resolve(__dirname, "apps/web/src"),
+      "@convex-generated-api": path.resolve(__dirname, "convex/_generated/api.js"),
+      "@lunchtable-tcg/cards": path.resolve(
+        __dirname,
+        "packages/lunchtable-tcg-cards/src/client/index.ts",
+      ),
+      "@lunchtable-tcg/engine": path.resolve(__dirname, "packages/engine/src/index.ts"),
+      "@lunchtable-tcg/match": path.resolve(
+        __dirname,
+        "packages/lunchtable-tcg-match/src/client/index.ts",
+      ),
+      "@lunchtable-tcg/story": path.resolve(
+        __dirname,
+        "packages/lunchtable-tcg-story/src/client/index.ts",
+      ),
+    },
+  },
+  test: {
+    include: [
+      "packages/engine/src/**/*.{test,spec}.{js,ts}",
+      "packages/plugin-ltcg/src/**/*.{test,spec}.{js,ts}",
+      "apps/web/src/**/*.{test,spec}.{js,ts}",
+      "convex/**/*.test.{js,ts}",
+      "api/**/*.test.{js,ts}",
+      "*.test.{js,ts}",
+    ],
+  },
+});

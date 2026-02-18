@@ -131,4 +131,4 @@ async function startDuelHandler(
     if (callback) await callback({ text });
     return { success: false, error: msg };
   }
-}
+};

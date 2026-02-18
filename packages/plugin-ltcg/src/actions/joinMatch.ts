@@ -74,6 +74,7 @@ export const joinMatchAction: Action = {
 
     try {
       const result = await client.joinMatch(matchId);
+      await client.setMatchWithSeat(result.matchId);
       const text = `Joined match ${result.matchId} as the away seat against host ${result.hostId}.`;
       if (callback) await callback({ text, action: "JOIN_LTCG_MATCH" });
       return { success: true, data: result };
