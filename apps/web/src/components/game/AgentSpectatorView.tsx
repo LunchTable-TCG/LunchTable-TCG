@@ -7,7 +7,8 @@
  */
 
 import { useAgentSpectator, type SpectatorMatchState } from "@/hooks/useAgentSpectator";
-import { useEffect } from "react";
+import { postToHost } from "@/lib/iframe";
+import { useEffect, useRef } from "react";
 
 declare global {
   interface Window {
@@ -22,6 +23,8 @@ interface Props {
 
 export function AgentSpectatorView({ apiKey, apiUrl }: Props) {
   const { agent, matchState, error, loading } = useAgentSpectator(apiKey, apiUrl);
+  const lastMatchStartedRef = useRef<string | null>(null);
+  const matchEndedRef = useRef(new Set<string>());
 
   if (loading) return <SpectatorLoading />;
   if (error) return <SpectatorError message={error} />;
@@ -65,6 +68,47 @@ export function AgentSpectatorView({ apiKey, apiUrl }: Props) {
     };
   }, [agent, matchState]);
 
+  useEffect(() => {
+    // Emit lightweight status snapshots for the host UI (milaidy).
+    if (!matchState) {
+      lastMatchStartedRef.current = null;
+      postToHost({
+        type: "AUTONOMY_STATUS",
+        status: "idle",
+        matchId: null,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    postToHost({
+      type: "AUTONOMY_STATUS",
+      status: matchState.gameOver ? "idle" : "running",
+      matchId: matchState.matchId,
+      phase: matchState.phase,
+      isAgentTurn: matchState.isAgentTurn,
+      gameOver: matchState.gameOver,
+      winner: matchState.winner ?? null,
+      chapterId: matchState.chapterId ?? null,
+      stageNumber: matchState.stageNumber ?? null,
+      timestamp: Date.now(),
+    });
+
+    if (lastMatchStartedRef.current !== matchState.matchId) {
+      lastMatchStartedRef.current = matchState.matchId;
+      postToHost({ type: "MATCH_STARTED", matchId: matchState.matchId });
+    }
+
+    if (matchState.gameOver && !matchEndedRef.current.has(matchState.matchId)) {
+      matchEndedRef.current.add(matchState.matchId);
+      postToHost({
+        type: "MATCH_ENDED",
+        matchId: matchState.matchId,
+        result: resolveMatchResult(matchState),
+      });
+    }
+  }, [matchState]);
+
   return (
     <div className="min-h-screen bg-[#fdfdfb] flex flex-col">
       {/* Agent header */}
@@ -99,6 +143,17 @@ export function AgentSpectatorView({ apiKey, apiUrl }: Props) {
       )}
     </div>
   );
+}
+
+function resolveMatchResult(state: SpectatorMatchState): "win" | "loss" | "draw" {
+  const draw = state.winner == null && state.myLP === state.oppLP;
+  if (draw) return "draw";
+
+  if (state.winner) {
+    return state.winner === state.seat ? "win" : "loss";
+  }
+
+  return state.myLP > state.oppLP ? "win" : "loss";
 }
 
 function MatchBoard({

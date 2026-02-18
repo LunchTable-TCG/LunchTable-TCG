@@ -2,7 +2,7 @@
  * Action: PLAY_LTCG_STORY
  *
  * Plays through a full story mode stage from start to finish:
- * 1. Gets story progress to find the next uncompleted stage
+ * 1. Gets the next playable story stage
  * 2. Fetches stage narrative (pre-match dialogue)
  * 3. Starts the battle
  * 4. Loops turns until game over (with AI opponent wait)
@@ -77,32 +77,18 @@ export const playStoryAction: Action = {
       }
 
       // ── 2. Find next stage ───────────────────────────────────
-      const progress = await client.getStoryProgress();
-      const chapters = progress.chapters;
-
-      if (!chapters.length) {
-        throw new Error("No story chapters available. Run seed first.");
+      const nextStage = await client.getNextStoryStage();
+      if (nextStage.done) {
+        const text = "Story complete — no stages remaining.";
+        if (callback) await callback({ text, action: "PLAY_LTCG_STORY" });
+        return { success: true, data: { done: true } };
+      }
+      if (!nextStage.chapterId || !nextStage.stageNumber) {
+        throw new Error("Next stage response missing chapterId or stageNumber.");
       }
 
-      const completedStages = new Set(
-        progress.stageProgress
-          .filter((s) => s.starsEarned > 0)
-          .map((s) => `${s.chapterId}:${s.stageNumber}`),
-      );
-
-      let targetChapterId = chapters[0]._id;
-      let targetStageNumber = 1;
-
-      // Walk through chapters, find next incomplete stage
-      outer: for (const chapter of chapters) {
-        for (let stage = 1; stage <= 10; stage++) {
-          if (!completedStages.has(`${chapter._id}:${stage}`)) {
-            targetChapterId = chapter._id;
-            targetStageNumber = stage;
-            break outer;
-          }
-        }
-      }
+      const targetChapterId = nextStage.chapterId;
+      const targetStageNumber = nextStage.stageNumber;
 
       // ── 3. Get stage narrative ───────────────────────────────
       let stageData: StageData | null = null;
@@ -112,11 +98,9 @@ export const playStoryAction: Action = {
         // Stage data not available — continue without narrative
       }
 
-      const chapterTitle =
-        chapters.find((c) => c._id === targetChapterId)?.title ??
-        chapters.find((c) => c._id === targetChapterId)?.name ??
-        "Unknown";
-      const opponentName = stageData?.opponentName ?? "AI Opponent";
+      const chapterTitle = nextStage.chapterTitle?.trim() || "Unknown";
+      const opponentName =
+        stageData?.opponentName ?? nextStage.opponentName ?? "AI Opponent";
 
       log.push(
         `Chapter "${chapterTitle}" — Stage ${targetStageNumber}: vs ${opponentName}`,

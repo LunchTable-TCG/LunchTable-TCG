@@ -109,6 +109,20 @@
         "vite": "^6.3.0",
       },
     },
+    "packages/app-lunchtable": {
+      "name": "@lunchtable-tcg/app-lunchtable",
+      "version": "0.1.0",
+      "dependencies": {
+        "@lunchtable-tcg/plugin-ltcg": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^25.2.3",
+        "typescript": "^5.0.0",
+      },
+      "peerDependencies": {
+        "@elizaos/core": ">=1.0.0",
+      },
+    },
     "packages/engine": {
       "name": "@lunchtable-tcg/engine",
       "version": "0.1.0",
@@ -434,6 +448,8 @@
     "@lunchtable-rpg/web": ["@lunchtable-rpg/web@workspace:apps/rpg-web"],
 
     "@lunchtable-rpg/worlds": ["@lunchtable-rpg/worlds@workspace:packages/rpg-worlds"],
+
+    "@lunchtable-tcg/app-lunchtable": ["@lunchtable-tcg/app-lunchtable@workspace:packages/app-lunchtable"],
 
     "@lunchtable-tcg/card-studio": ["@lunchtable-tcg/card-studio@workspace:apps/card-studio"],
 

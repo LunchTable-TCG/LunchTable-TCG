@@ -16,6 +16,7 @@ import type {
   StageCompletionResult,
   StageData,
   StarterDeck,
+  StoryNextStageResponse,
   StoryProgress,
 } from "./types.js";
 
@@ -189,6 +190,11 @@ export class LTCGClient {
   /** GET /api/agent/story/progress — get full story progress */
   async getStoryProgress(): Promise<StoryProgress> {
     return this.get("/api/agent/story/progress");
+  }
+
+  /** GET /api/agent/story/next-stage — get next playable story stage */
+  async getNextStoryStage(): Promise<StoryNextStageResponse> {
+    return this.get("/api/agent/story/next-stage");
   }
 
   /** GET /api/agent/story/stage — get stage data with narrative */

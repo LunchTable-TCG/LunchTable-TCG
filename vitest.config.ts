@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     include: [
       "packages/engine/src/**/*.{test,spec}.{js,ts}",
+      "packages/plugin-ltcg/src/**/*.{test,spec}.{js,ts}",
       "apps/web/src/**/*.{test,spec}.{js,ts}",
       "convex/**/*.test.{js,ts}",
       "api/**/*.test.{js,ts}",

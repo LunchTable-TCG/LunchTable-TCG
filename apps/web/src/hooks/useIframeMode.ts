@@ -17,8 +17,24 @@ export function useIframeMode() {
     new URLSearchParams(window.location.search).get("embedded") === "true";
   const isEmbedded = isInIframe || hasEmbedParam;
 
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(() =>
+    readDebugAuthTokenFromQuery(),
+  );
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [hostControl, setHostControl] = useState<{
+    requestedMode: "story" | "pvp" | null;
+    lastCommand:
+      | "START_MATCH"
+      | "PAUSE_AUTONOMY"
+      | "RESUME_AUTONOMY"
+      | "STOP_MATCH"
+      | null;
+    lastCommandAt: number | null;
+  }>({
+    requestedMode: null,
+    lastCommand: null,
+    lastCommandAt: null,
+  });
   const signaled = useRef(false);
 
   useEffect(() => {
@@ -32,9 +48,27 @@ export function useIframeMode() {
 
     // Listen for auth from host
     return onHostMessage((msg: HostToGame) => {
-      if (msg.type === "LTCG_AUTH") {
+      if (msg.type === "LTCG_AUTH" || msg.type === "AUTH_TOKEN") {
         setAuthToken(msg.authToken);
         if (msg.agentId) setAgentId(msg.agentId);
+      }
+      if (msg.type === "START_MATCH") {
+        setHostControl({
+          requestedMode: msg.mode,
+          lastCommand: "START_MATCH",
+          lastCommandAt: Date.now(),
+        });
+      }
+      if (
+        msg.type === "PAUSE_AUTONOMY" ||
+        msg.type === "RESUME_AUTONOMY" ||
+        msg.type === "STOP_MATCH"
+      ) {
+        setHostControl((prev) => ({
+          ...prev,
+          lastCommand: msg.type,
+          lastCommandAt: Date.now(),
+        }));
       }
     });
   }, [isEmbedded, isInIframe]);
@@ -47,6 +81,7 @@ export function useIframeMode() {
     isEmbedded,
     authToken,
     agentId,
+    hostControl,
     /** True when the token is an ltcg_ API key (spectator mode) */
     isApiKey,
     /** True when the token is a Privy JWT (full Convex auth) */
@@ -60,4 +95,19 @@ function looksLikeJWT(token: string): boolean {
   if (parts.length !== 3) return false;
   const base64urlPattern = /^[A-Za-z0-9_-]+$/;
   return parts.every((part) => base64urlPattern.test(part));
+}
+
+function readDebugAuthTokenFromQuery(): string | null {
+  if (typeof window === "undefined") return null;
+  const token = new URLSearchParams(window.location.search).get("authToken");
+  if (!token) return null;
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+
+  // Only allow query-param auth tokens in dev/local contexts.
+  if (import.meta.env.DEV || window.location.hostname === "localhost") {
+    return trimmed;
+  }
+
+  return null;
 }

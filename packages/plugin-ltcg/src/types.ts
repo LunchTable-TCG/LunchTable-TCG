@@ -311,6 +311,15 @@ export interface StoryProgress {
   totalStars: number;
 }
 
+/** GET /api/agent/story/next-stage */
+export interface StoryNextStageResponse {
+  done: boolean;
+  chapterId?: string;
+  stageNumber?: number;
+  chapterTitle?: string;
+  opponentName?: string;
+}
+
 /** GET /api/agent/story/stage */
 export interface StageData {
   _id: string;
