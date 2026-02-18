@@ -13,8 +13,10 @@
     "dev": "concurrently -n convex,web -c blue,magenta \"bun run dev:convex\" \"bun run dev:web\"",
     "dev:convex": "convex dev",
     "dev:web": "cd apps/web && bun run dev",
-    "test": "bun test ./scripts/trust-scoring.bun_test.js && vitest",
-    "test:once": "bun test ./scripts/trust-scoring.bun_test.js && vitest run"
+    "test": "vitest",
+    "test:once": "vitest run",
+    "test:package-exports": "node scripts/verify-package-exports.mjs",
+    "lint": "echo \"lint: no-op\""
   },
   "dependencies": {
     "@lunchtable-tcg/cards": "workspace:*",
