@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { decide, evolve } from "@lunchtable-tcg/engine";
-import type { GameState, Command, Seat, EngineEvent } from "@lunchtable-tcg/engine";
+import type {
+  CardDefinition,
+  Command,
+  EngineEvent,
+  GameState,
+  Seat,
+} from "@lunchtable-tcg/engine";
 
 // ---------------------------------------------------------------------------
 // Shared validators
@@ -65,6 +71,64 @@ export function haveSameCardCounts(a: string[], b: string[]): boolean {
     if (right.get(cardId) !== count) return false;
   }
   return true;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isValidCardDefinition(cardId: string, definition: unknown): asserts definition is CardDefinition {
+  if (!definition || typeof definition !== "object") {
+    throw new Error(`initialState.cardLookup[${cardId}] must be an object`);
+  }
+
+  const definitionObj = definition as Partial<CardDefinition>;
+  if (typeof definitionObj.id !== "string" || definitionObj.id.trim().length === 0) {
+    throw new Error(`initialState.cardLookup[${cardId}] has invalid id`);
+  }
+  if (typeof definitionObj.name !== "string" || definitionObj.name.trim().length === 0) {
+    throw new Error(`initialState.cardLookup[${cardId}] has invalid name`);
+  }
+  if (
+    definitionObj.type !== "stereotype" &&
+    definitionObj.type !== "spell" &&
+    definitionObj.type !== "trap"
+  ) {
+    throw new Error(`initialState.cardLookup[${cardId}] has invalid type`);
+  }
+
+  if (definitionObj.type === "stereotype") {
+    if (!isFiniteNumber(definitionObj.attack)) {
+      throw new Error(
+        `initialState.cardLookup[${cardId}] stereotype must have numeric attack`,
+      );
+    }
+    if (!isFiniteNumber(definitionObj.defense)) {
+      throw new Error(
+        `initialState.cardLookup[${cardId}] stereotype must have numeric defense`,
+      );
+    }
+    if (!isFiniteNumber(definitionObj.level)) {
+      throw new Error(`initialState.cardLookup[${cardId}] stereotype must have numeric level`);
+    }
+    if (definitionObj.attack < 0) {
+      throw new Error(`initialState.cardLookup[${cardId}] stereotype attack must be non-negative`);
+    }
+    if (definitionObj.defense < 0) {
+      throw new Error(`initialState.cardLookup[${cardId}] stereotype defense must be non-negative`);
+    }
+    if (definitionObj.level < 1 || definitionObj.level > 12) {
+      throw new Error(`initialState.cardLookup[${cardId}] stereotype level must be between 1 and 12`);
+    }
+    return;
+  }
+
+  if (definitionObj.type === "spell" && typeof definitionObj.spellType !== "string") {
+    throw new Error(`initialState.cardLookup[${cardId}] spell must have spellType`);
+  }
+  if (definitionObj.type === "trap" && typeof definitionObj.trapType !== "string") {
+    throw new Error(`initialState.cardLookup[${cardId}] trap must have trapType`);
+  }
 }
 
 function resolveDefinitionIdForChainCard(
@@ -196,9 +260,11 @@ export function assertInitialStateIntegrity(
 
   const allReferencedCards = [...actualHostCards, ...actualAwayCards];
   for (const cardId of allReferencedCards) {
-    if (!state.cardLookup[cardId]) {
+    const definition = state.cardLookup[cardId];
+    if (!definition) {
       throw new Error(`initialState.cardLookup missing definition for ${cardId}`);
     }
+    isValidCardDefinition(cardId, definition);
   }
 }
 
@@ -446,13 +512,6 @@ export const submitAction = mutation({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`Engine decide()/evolve() failed: ${message}`);
-    }
-
-    if (events.length === 0) {
-      return {
-        events: JSON.stringify([]),
-        version: latestSnapshot.version,
-      };
     }
 
     // -----------------------------------------------------------------------

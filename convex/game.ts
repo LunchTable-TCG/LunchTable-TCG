@@ -1677,7 +1677,6 @@ export const submitAction = mutation({
     seat: v.union(v.literal("host"), v.literal("away")),
     expectedVersion: v.optional(v.number()),
     actorUserId: v.optional(v.id("users")),
-    expectedVersion: v.optional(v.number()),
   },
   returns: v.object({
     events: v.string(),
@@ -2046,11 +2045,15 @@ export const getLatestSnapshotVersion = query({
   },
   returns: v.any(),
   handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (args.actorUserId && String(args.actorUserId) !== user._id) {
+      throw new Error("actorUserId must match authenticated user.");
+    }
     await requireMatchParticipant(
       ctx,
       args.matchId,
       undefined,
-      args.actorUserId ? String(args.actorUserId) : undefined,
+      user._id,
     );
     return match.getLatestSnapshotVersion(ctx, {
       matchId: args.matchId,

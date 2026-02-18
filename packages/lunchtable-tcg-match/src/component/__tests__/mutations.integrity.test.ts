@@ -15,12 +15,12 @@ function makeInitialState(overrides: Partial<GameState> = {}): GameState {
       breakdownDamage: 2000,
     },
     cardLookup: {
-      h1: { id: "h1", name: "Host Hand", type: "stereotype" },
-      h2: { id: "h2", name: "Host Deck 1", type: "stereotype" },
-      h3: { id: "h3", name: "Host Deck 2", type: "stereotype" },
-      a1: { id: "a1", name: "Away Hand", type: "stereotype" },
-      a2: { id: "a2", name: "Away Deck 1", type: "stereotype" },
-      a3: { id: "a3", name: "Away Deck 2", type: "stereotype" },
+      h1: { id: "h1", name: "Host Hand", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
+      h2: { id: "h2", name: "Host Deck 1", type: "stereotype", attack: 1200, defense: 1000, level: 4 },
+      h3: { id: "h3", name: "Host Deck 2", type: "stereotype", attack: 1400, defense: 1200, level: 4 },
+      a1: { id: "a1", name: "Away Hand", type: "stereotype", attack: 500, defense: 1000, level: 3 },
+      a2: { id: "a2", name: "Away Deck 1", type: "stereotype", attack: 800, defense: 1000, level: 4 },
+      a3: { id: "a3", name: "Away Deck 2", type: "stereotype", attack: 700, defense: 900, level: 3 },
     },
     hostId: "host-user",
     awayId: "away-user",
@@ -140,6 +140,38 @@ describe("assertInitialStateIntegrity", () => {
     } as unknown as Partial<GameState>);
     expect(() => assertInitialStateIntegrity(match, state)).toThrow(
       "initialState.cardLookup missing definition for h2",
+    );
+  });
+
+  it("rejects malformed stereotype definitions", () => {
+    const state = makeInitialState({
+      cardLookup: {
+        h1: { id: "h1", name: "Host Hand", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
+        h2: { id: "h2", name: "Host Deck 1", type: "stereotype", attack: "invalid", defense: 1000, level: 4 } as any,
+        h3: { id: "h3", name: "Host Deck 2", type: "stereotype", attack: 1400, defense: 1200, level: 4 },
+        a1: { id: "a1", name: "Away Hand", type: "stereotype", attack: 500, defense: 1000, level: 3 },
+        a2: { id: "a2", name: "Away Deck 1", type: "stereotype", attack: 800, defense: 1000, level: 4 },
+        a3: { id: "a3", name: "Away Deck 2", type: "stereotype", attack: 700, defense: 900, level: 3 },
+      },
+    } as unknown as Partial<GameState>);
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
+      "initialState.cardLookup[h2] stereotype must have numeric attack",
+    );
+  });
+
+  it("rejects malformed spell/trap definitions", () => {
+    const state = makeInitialState({
+      cardLookup: {
+        h1: { id: "h1", name: "Host Hand", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
+        h2: { id: "h2", name: "Host Deck 1", type: "spell" },
+        h3: { id: "h3", name: "Host Deck 2", type: "stereotype", attack: 1400, defense: 1200, level: 4 },
+        a1: { id: "a1", name: "Away Hand", type: "stereotype", attack: 500, defense: 1000, level: 3 },
+        a2: { id: "a2", name: "Away Deck 1", type: "stereotype", attack: 800, defense: 1000, level: 4 },
+        a3: { id: "a3", name: "Away Deck 2", type: "stereotype", attack: 700, defense: 900, level: 3 },
+      },
+    } as unknown as Partial<GameState>);
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
+      "initialState.cardLookup[h2] spell must have spellType",
     );
   });
 });
