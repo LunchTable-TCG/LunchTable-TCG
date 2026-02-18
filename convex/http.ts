@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
+import { assertMatchParticipant, type MatchSeat } from "./matchAccess";
 
 const http = httpRouter();
 
@@ -114,8 +115,6 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
-type MatchSeat = "host" | "away";
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
@@ -177,51 +176,61 @@ function normalizeGameCommand(rawCommand: unknown): unknown {
   return command;
 }
 
-async function resolveMatchAndSeat(
+type MatchMetaSummary = Record<string, unknown> & {
+  hostId?: string | null;
+  awayId?: string | null;
+  status?: string | null;
+  mode?: string | null;
+  winner?: MatchSeat | null;
+  endReason?: string | null;
+};
+
+function readOptionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function readOptionalWinner(value: unknown): MatchSeat | null {
+  return value === "host" || value === "away" ? value : null;
+}
+
+function normalizeMatchMeta(raw: unknown): MatchMetaSummary {
+  if (!isPlainObject(raw)) {
+    throw new Error("Match metadata is malformed.");
+  }
+
+  return {
+    ...raw,
+    hostId: readOptionalString(raw.hostId),
+    awayId: readOptionalString(raw.awayId),
+    status: readOptionalString(raw.status),
+    mode: readOptionalString(raw.mode),
+    winner: readOptionalWinner(raw.winner),
+    endReason: readOptionalString(raw.endReason),
+  };
+}
+
+export async function resolveMatchAndSeat(
   ctx: { runQuery: any },
   agentUserId: string,
   matchId: string,
   requestedSeat?: string,
 ) {
-  const meta = await ctx.runQuery(api.game.getMatchMeta, {
+  const rawMeta = await ctx.runQuery(api.game.getMatchMeta, {
     matchId,
     actorUserId: agentUserId as any,
   });
-  if (!meta) {
+  if (!rawMeta) {
     throw new Error("Match not found");
   }
-
-  const hostId = (meta as any).hostId;
-  const awayId = (meta as any).awayId;
+  const meta = normalizeMatchMeta(rawMeta);
 
   if (requestedSeat !== undefined && requestedSeat !== "host" && requestedSeat !== "away") {
     throw new Error("seat must be 'host' or 'away'.");
   }
 
   const seat = requestedSeat as MatchSeat | undefined;
-
-  if (seat === "host") {
-    if (hostId !== agentUserId) {
-      throw new Error("You are not the host in this match.");
-    }
-    return { meta, seat: "host" as MatchSeat };
-  }
-
-  if (seat === "away") {
-    if (awayId !== agentUserId) {
-      throw new Error("You are not the away player in this match.");
-    }
-    return { meta, seat: "away" as MatchSeat };
-  }
-
-  if (hostId === agentUserId) {
-    return { meta, seat: "host" as MatchSeat };
-  }
-  if (awayId === agentUserId) {
-    return { meta, seat: "away" as MatchSeat };
-  }
-
-  throw new Error("You are not a participant in this match.");
+  const resolvedSeat = assertMatchParticipant(meta, agentUserId, seat);
+  return { meta, seat: resolvedSeat };
 }
 
 // ── Routes ───────────────────────────────────────────────────────
@@ -580,6 +589,7 @@ corsRoute({
     try {
       const result = await ctx.runMutation(api.game.completeStoryStage, {
         matchId,
+        actorUserId: agent.userId as any,
       });
       return jsonResponse(result);
     } catch (e: any) {
@@ -612,13 +622,13 @@ corsRoute({
 
       return jsonResponse({
         matchId,
-        status: (validatedMeta as any)?.status,
-        mode: (validatedMeta as any)?.mode,
-        winner: (validatedMeta as any)?.winner ?? null,
-        endReason: (validatedMeta as any)?.endReason ?? null,
-        isGameOver: (validatedMeta as any)?.status === "ended",
-        hostId: (validatedMeta as any)?.hostId ?? null,
-        awayId: (validatedMeta as any)?.awayId ?? null,
+        status: validatedMeta.status ?? null,
+        mode: validatedMeta.mode ?? null,
+        winner: validatedMeta.winner ?? null,
+        endReason: validatedMeta.endReason ?? null,
+        isGameOver: validatedMeta.status === "ended",
+        hostId: validatedMeta.hostId ?? null,
+        awayId: validatedMeta.awayId ?? null,
         seat,
         chapterId: storyCtx?.chapterId ?? null,
         stageNumber: storyCtx?.stageNumber ?? null,

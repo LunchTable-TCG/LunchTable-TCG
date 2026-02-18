@@ -841,15 +841,24 @@ function resolveAICupSeat(meta: any): "host" | "away" | null {
 async function resolveActor(
   ctx: any,
   actorUserId?: string,
+  dependencies?: {
+    getUserById?: (ctx: any, actorUserId: string) => Promise<{ _id: string } | null>;
+    requireUserFn?: (ctx: any) => Promise<{ _id: string }>;
+  },
 ) {
+  const getUserById =
+    dependencies?.getUserById ??
+    (async (innerCtx: any, userId: string) => innerCtx.db.get(userId as any));
+  const requireUserFn = dependencies?.requireUserFn ?? requireUser;
+
   if (actorUserId) {
-    const actor = await ctx.db.get(actorUserId as any);
+    const actor = await getUserById(ctx, actorUserId);
     if (!actor) {
       throw new Error("Actor user not found.");
     }
     return actor;
   }
-  return requireUser(ctx);
+  return requireUserFn(ctx);
 }
 
 async function requireMatchParticipant(
@@ -857,9 +866,25 @@ async function requireMatchParticipant(
   matchId: string,
   seat?: "host" | "away",
   actorUserId?: string,
+  dependencies?: {
+    resolveActorFn?: (
+      ctx: any,
+      actorUserId?: string,
+    ) => Promise<{ _id: string }>;
+    getMatchMetaFn?: (
+      ctx: any,
+      matchId: string,
+    ) => Promise<{ hostId?: string | null; awayId?: string | null } | null>;
+  },
 ) {
-  const actor = await resolveActor(ctx, actorUserId);
-  const meta = await match.getMatchMeta(ctx, { matchId });
+  const resolveActorFn = dependencies?.resolveActorFn ?? resolveActor;
+  const getMatchMetaFn =
+    dependencies?.getMatchMetaFn ??
+    (async (innerCtx: any, innerMatchId: string) =>
+      match.getMatchMeta(innerCtx, { matchId: innerMatchId }));
+
+  const actor = await resolveActorFn(ctx, actorUserId);
+  const meta = await getMatchMetaFn(ctx, matchId);
   if (!meta) {
     throw new Error("Match not found.");
   }
@@ -868,6 +893,27 @@ async function requireMatchParticipant(
 
   return { actor, meta, seat: participantSeat };
 }
+
+function assertStoryMatchRequesterAuthorized(
+  storyMatch: { userId: string },
+  requesterUserId: string,
+  meta: { hostId?: string | null; awayId?: string | null } | null,
+) {
+  if (storyMatch.userId === requesterUserId) {
+    return;
+  }
+
+  const requesterSeat = resolveSeatForUser(meta, requesterUserId);
+  if (!requesterSeat) {
+    throw new Error("Not your match");
+  }
+}
+
+export const __test = {
+  resolveActor,
+  requireMatchParticipant,
+  assertStoryMatchRequesterAuthorized,
+};
 
 // ── Submit Action ──────────────────────────────────────────────────
 
@@ -1291,13 +1337,10 @@ export const completeStoryStage = mutation({
     actorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const requester = args.actorUserId
-      ? await ctx.db.get(args.actorUserId)
-      : await requireUser(ctx);
-
-    if (!requester) {
-      throw new Error("User not found.");
-    }
+    const requester = await resolveActor(
+      ctx,
+      args.actorUserId ? String(args.actorUserId) : undefined,
+    );
 
     // Look up story context
     const storyMatch = await ctx.db
@@ -1308,10 +1351,7 @@ export const completeStoryStage = mutation({
 
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     if (!meta) throw new Error("Match metadata not found");
-    const requesterSeat = resolveSeatForUser(meta, requester._id);
-    if (storyMatch.userId !== requester._id && !requesterSeat) {
-      throw new Error("Not your match");
-    }
+    assertStoryMatchRequesterAuthorized(storyMatch, requester._id, meta);
 
     const progressOwnerId = storyMatch.userId;
 
