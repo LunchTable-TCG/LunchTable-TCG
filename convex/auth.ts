@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 import { LTCGCards } from "@lunchtable-tcg/cards";
+import { isValidSignupAvatarPath, normalizeSignupAvatarPath } from "./signupAvatar";
 
 /**
  * Extracts user identity from JWT via ctx.auth.getUserIdentity().
@@ -60,7 +61,6 @@ export const syncUser = mutation({
     return await ctx.db.insert("users", {
       privyId,
       username: `player_${Date.now()}`,
-      avatarPath: DEFAULT_SIGNUP_AVATAR_PATH,
       email,
       createdAt: Date.now(),
     });
@@ -85,7 +85,7 @@ export const currentUser = query({
 });
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
-const DEFAULT_SIGNUP_AVATAR_PATH = "avatars/signup/avatar-001.png";
+
 const vOnboardingStatus = v.object({
   exists: v.boolean(),
   hasUsername: v.boolean(),
@@ -93,12 +93,6 @@ const vOnboardingStatus = v.object({
   hasStarterDeck: v.boolean(),
 });
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
-const VALID_SIGNUP_AVATAR_PATHS = new Set(
-  Array.from({ length: 29 }, (_, index) => {
-    const suffix = String(index + 1).padStart(3, "0");
-    return `avatars/signup/avatar-${suffix}.png`;
-  }),
-);
 const normalizeDeckId = (deckId: string | undefined): string | null => {
   if (!deckId) return null;
   const trimmed = deckId.trim();
@@ -137,7 +131,7 @@ export const getOnboardingStatus = query({
     return {
       exists: true,
       hasUsername: !user.username.startsWith("player_"),
-      hasAvatar: Boolean(user.avatarPath),
+      hasAvatar: isValidSignupAvatarPath(user.avatarPath),
       hasStarterDeck: hasActiveDeck,
     };
   },
@@ -180,11 +174,8 @@ export const setAvatarPath = mutation({
   returns: v.object({ success: v.boolean(), avatarPath: v.string() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const avatarPath = args.avatarPath.trim();
-
-    if (!VALID_SIGNUP_AVATAR_PATHS.has(avatarPath)) {
-      throw new ConvexError("Invalid avatar selection.");
-    }
+    const avatarPath = normalizeSignupAvatarPath(args.avatarPath);
+    if (!avatarPath) throw new ConvexError("Invalid avatar selection.");
 
     await ctx.db.patch(user._id, { avatarPath });
     return { success: true, avatarPath };

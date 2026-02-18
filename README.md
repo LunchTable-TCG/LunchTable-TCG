@@ -53,14 +53,26 @@ Set these environment variables before enabling Telegram inline + Mini App gamep
 TELEGRAM_BOT_TOKEN=123456:your_bot_token
 TELEGRAM_WEBHOOK_SECRET=your_random_secret
 TELEGRAM_BOT_USERNAME=YourBot
+TELEGRAM_WEB_APP_URL=https://your-web-app.example/ # used for Games launch URLs
+
+# Optional but recommended: direct mini app links (works even if Main Mini App isn't enabled yet)
+TELEGRAM_MINIAPP_SHORT_NAME=your_mini_app_short_name
+
+# Optional: Telegram Games API
+TELEGRAM_GAME_SHORT_NAME=your_game_short_name
 
 # Web runtime
 VITE_TELEGRAM_BOT_USERNAME=YourBot
+VITE_TELEGRAM_MINIAPP_SHORT_NAME=your_mini_app_short_name
+VITE_TELEGRAM_GAME_SHORT_NAME=your_game_short_name
 ```
 
 BotFather checklist:
 - Enable inline mode: `/setinline`
-- Set Mini App URL: `/mybots` -> Bot Settings -> Menu Button URL
+- Set Menu Button URL: `/mybots` -> Bot Settings -> Menu Button
+- Configure Main Mini App: `/mybots` -> Bot Settings -> Configure Mini App (enables `?startapp=` links)
+- (Optional) Create a Direct Mini App short name: `/newapp` (use for `t.me/<bot>/<short_name>?startapp=...`)
+- (Optional) Create a Game: `/newgame` (set `TELEGRAM_GAME_SHORT_NAME`)
 
 Webhook setup:
 
