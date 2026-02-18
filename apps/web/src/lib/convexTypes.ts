@@ -184,6 +184,9 @@ export type PlayerView = {
   currentChain: ChainLink[];
   winner: Seat | null;
   winReason: "lp_zero" | "deck_out" | "breakdown" | "surrender" | null;
+  normalSummonedThisTurn: boolean;
+  maxBoardSlots: number;
+  maxSpellTrapSlots: number;
   players?: {
     host?: {
       lifePoints?: number;

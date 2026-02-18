@@ -10,8 +10,6 @@ export type ValidActions = {
   canFlipSummon: Set<string>;
 };
 
-const MAX_BOARD_SLOTS = 3;
-const MAX_SPELL_TRAP_SLOTS = 3;
 const TRIBUTE_LEVEL = 7;
 
 export function deriveValidActions(params: {
@@ -39,8 +37,8 @@ export function deriveValidActions(params: {
   if (!isChainWindow && !isMyTurn) return va;
 
   const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
-  const maxBoardSlots = view.maxBoardSlots ?? MAX_BOARD_SLOTS;
-  const maxSpellTrapSlots = view.maxSpellTrapSlots ?? MAX_SPELL_TRAP_SLOTS;
+  const maxBoardSlots = view.maxBoardSlots ?? 3;
+  const maxSpellTrapSlots = view.maxSpellTrapSlots ?? 3;
   const normalSummonedThisTurn = view.normalSummonedThisTurn ?? false;
   const board = view.board ?? [];
   const hand = view.hand ?? [];

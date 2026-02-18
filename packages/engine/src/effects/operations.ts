@@ -84,58 +84,37 @@ function detectCardZone(state: GameState, cardId: string): TransferZone | null {
   return null;
 }
 
-type LocatedCard = {
-  zone: TransferZone;
-  sourceSeat: Seat | undefined;
-};
+function detectCardZoneAndSeat(
+  state: GameState,
+  cardId: string
+): { from: TransferZone; sourceSeat: Seat } | null {
+  const boardCard = findBoardCard(state, cardId);
+  if (boardCard) return { from: "board", sourceSeat: boardCard.seat };
 
-function locateCardZone(state: GameState, cardId: string): LocatedCard | null {
-  if (findBoardCard(state, cardId)) {
-    const located = findBoardCard(state, cardId);
-    return located ? { zone: "board", sourceSeat: located.seat } : null;
-  }
+  if (state.hostHand.includes(cardId)) return { from: "hand", sourceSeat: "host" };
+  if (state.awayHand.includes(cardId)) return { from: "hand", sourceSeat: "away" };
 
-  if (state.hostHand.includes(cardId)) {
-    return { zone: "hand", sourceSeat: "host" };
+  const hostSpellTrap = state.hostSpellTrapZone.find((card) => card.cardId === cardId);
+  if (hostSpellTrap) {
+    return { from: "spell_trap_zone", sourceSeat: "host" };
   }
-  if (state.awayHand.includes(cardId)) {
-    return { zone: "hand", sourceSeat: "away" };
-  }
-
-  if (state.hostSpellTrapZone.some((card) => card.cardId === cardId)) {
-    return { zone: "spell_trap_zone", sourceSeat: "host" };
-  }
-  if (state.awaySpellTrapZone.some((card) => card.cardId === cardId)) {
-    return { zone: "spell_trap_zone", sourceSeat: "away" };
+  const awaySpellTrap = state.awaySpellTrapZone.find((card) => card.cardId === cardId);
+  if (awaySpellTrap) {
+    return { from: "spell_trap_zone", sourceSeat: "away" };
   }
 
   if (state.hostFieldSpell?.cardId === cardId) {
-    return { zone: "field", sourceSeat: "host" };
+    return { from: "field", sourceSeat: "host" };
   }
   if (state.awayFieldSpell?.cardId === cardId) {
-    return { zone: "field", sourceSeat: "away" };
+    return { from: "field", sourceSeat: "away" };
   }
 
-  if (state.hostGraveyard.includes(cardId)) {
-    return { zone: "graveyard", sourceSeat: "host" };
-  }
-  if (state.awayGraveyard.includes(cardId)) {
-    return { zone: "graveyard", sourceSeat: "away" };
-  }
+  if (state.hostGraveyard.includes(cardId)) return { from: "graveyard", sourceSeat: "host" };
+  if (state.awayGraveyard.includes(cardId)) return { from: "graveyard", sourceSeat: "away" };
 
-  if (state.hostBanished.includes(cardId)) {
-    return { zone: "banished", sourceSeat: "host" };
-  }
-  if (state.awayBanished.includes(cardId)) {
-    return { zone: "banished", sourceSeat: "away" };
-  }
-
-  if (state.hostDeck.includes(cardId)) {
-    return { zone: "deck", sourceSeat: "host" };
-  }
-  if (state.awayDeck.includes(cardId)) {
-    return { zone: "deck", sourceSeat: "away" };
-  }
+  if (state.hostBanished.includes(cardId)) return { from: "banished", sourceSeat: "host" };
+  if (state.awayBanished.includes(cardId)) return { from: "banished", sourceSeat: "away" };
 
   return null;
 }
@@ -358,13 +337,14 @@ function executeBanish(
   const events: EngineEvent[] = [];
 
   for (const targetId of targets) {
-    const located = locateCardZone(state, targetId);
-    if (!located) continue;
+    const detectedSource = detectCardZoneAndSeat(state, targetId);
+    if (!detectedSource) continue;
+
     events.push({
       type: "CARD_BANISHED",
       cardId: targetId,
-      from: located.zone,
-      sourceSeat: located.sourceSeat,
+      from: detectedSource.from,
+      sourceSeat: detectedSource.sourceSeat,
     });
   }
 
@@ -379,14 +359,11 @@ function executeReturnToHand(
   const events: EngineEvent[] = [];
 
   for (const targetId of targets) {
-    const located = locateCardZone(state, targetId);
-    if (!located) continue;
-    events.push({
-      type: "CARD_RETURNED_TO_HAND",
-      cardId: targetId,
-      from: located.zone,
-      sourceSeat: located.sourceSeat,
-    });
+    const detectedSource = detectCardZoneAndSeat(state, targetId);
+    if (!detectedSource) continue;
+
+    const { from, sourceSeat } = detectedSource;
+    events.push({ type: "CARD_RETURNED_TO_HAND", cardId: targetId, from, sourceSeat });
   }
 
   return events;

@@ -1675,6 +1675,7 @@ export const submitAction = mutation({
     matchId: v.string(),
     command: v.string(),
     seat: v.union(v.literal("host"), v.literal("away")),
+    expectedVersion: v.optional(v.number()),
     actorUserId: v.optional(v.id("users")),
     expectedVersion: v.optional(v.number()),
   },

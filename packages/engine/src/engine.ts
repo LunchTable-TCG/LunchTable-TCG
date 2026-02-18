@@ -1123,16 +1123,84 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
       }
 
       case "SPECIAL_SUMMONED": {
-        const from = normalizeTransferZone(event.from);
-        if (!from) break;
+        const { cardId, from, seat } = event;
+        const normalizedFrom = from === "spellTrapZone" ? "spell_trap_zone" : from;
 
-        const removal = removeCardFromZone(newState, event.cardId, from);
-        if (!removal.owner) break;
+        const removeFromZone = (owner: Seat) => {
+          const isHost = owner === "host";
+          const boardKey = isHost ? "hostBoard" : "awayBoard";
+          const handKey = isHost ? "hostHand" : "awayHand";
+          const graveyardKey = isHost ? "hostGraveyard" : "awayGraveyard";
+          const banishedKey = isHost ? "hostBanished" : "awayBanished";
+          const spellTrapKey = isHost ? "hostSpellTrapZone" : "awaySpellTrapZone";
+          const fieldKey = isHost ? "hostFieldSpell" : "awayFieldSpell";
+          const deckKey = isHost ? "hostDeck" : "awayDeck";
 
-        newState = removal.state;
+          let removed = false;
+          if (normalizedFrom === "board") {
+            const board = [...(newState as any)[boardKey]];
+            const index = board.findIndex((c: any) => c.cardId === cardId);
+            if (index > -1) {
+              board.splice(index, 1);
+              (newState as any)[boardKey] = board;
+              removed = true;
+            }
+          } else if (normalizedFrom === "hand") {
+            const hand = [...(newState as any)[handKey]];
+            const index = hand.indexOf(cardId);
+            if (index > -1) {
+              hand.splice(index, 1);
+              (newState as any)[handKey] = hand;
+              removed = true;
+            }
+          } else if (normalizedFrom === "graveyard") {
+            const graveyard = [...(newState as any)[graveyardKey]];
+            const index = graveyard.indexOf(cardId);
+            if (index > -1) {
+              graveyard.splice(index, 1);
+              (newState as any)[graveyardKey] = graveyard;
+              removed = true;
+            }
+          } else if (normalizedFrom === "spell_trap_zone") {
+            const spellTrapZone = [...(newState as any)[spellTrapKey]];
+            const index = spellTrapZone.findIndex((c: any) => c.cardId === cardId);
+            if (index > -1) {
+              spellTrapZone.splice(index, 1);
+              (newState as any)[spellTrapKey] = spellTrapZone;
+              removed = true;
+            }
+          } else if (normalizedFrom === "field") {
+            if ((newState as any)[fieldKey]?.cardId === cardId) {
+              (newState as any)[fieldKey] = null;
+              removed = true;
+            }
+          } else if (normalizedFrom === "banished") {
+            const banished = [...(newState as any)[banishedKey]];
+            const index = banished.indexOf(cardId);
+            if (index > -1) {
+              banished.splice(index, 1);
+              (newState as any)[banishedKey] = banished;
+              removed = true;
+            }
+          } else if (normalizedFrom === "deck") {
+            const deck = [...(newState as any)[deckKey]];
+            const index = deck.indexOf(cardId);
+            if (index > -1) {
+              deck.splice(index, 1);
+              (newState as any)[deckKey] = deck;
+              removed = true;
+            }
+          }
+
+          return removed;
+        };
+
+        if (!removeFromZone("host") && !removeFromZone("away")) {
+          break;
+        }
 
         const newCard: BoardCard = {
-          cardId: event.cardId,
+          cardId,
           definitionId: event.cardId,
           position: event.position,
           faceDown: false,
@@ -1145,7 +1213,7 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
           turnSummoned: newState.turnNumber,
         };
 
-        if (event.seat === "host") {
+        if (seat === "host") {
           newState.hostBoard = [...newState.hostBoard, newCard];
         } else {
           newState.awayBoard = [...newState.awayBoard, newCard];

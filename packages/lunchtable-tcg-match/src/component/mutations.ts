@@ -460,6 +460,13 @@ export const submitAction = mutation({
     // -----------------------------------------------------------------------
     const newVersion = latestSnapshot.version + 1;
 
+    if (events.length === 0) {
+      return {
+        events: JSON.stringify([]),
+        version: latestSnapshot.version,
+      };
+    }
+
     await ctx.db.insert("matchSnapshots", {
       matchId: args.matchId,
       version: newVersion,
