@@ -1,8 +1,9 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 import { LTCGCards } from "@lunchtable-tcg/cards";
+import { isValidSignupAvatarPath, normalizeSignupAvatarPath } from "./signupAvatar";
 
 /**
  * Extracts user identity from JWT via ctx.auth.getUserIdentity().
@@ -10,7 +11,7 @@ import { LTCGCards } from "@lunchtable-tcg/cards";
  */
 export async function requireAuth(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not authenticated");
+  if (!identity) throw new ConvexError("Not authenticated");
   const privyId = identity.subject;
   return { privyId, identity };
 }
@@ -25,7 +26,7 @@ export async function requireUser(ctx: QueryCtx | MutationCtx) {
     .query("users")
     .withIndex("by_privyId", (q) => q.eq("privyId", privyId))
     .first();
-  if (!user) throw new Error("User not found. Complete signup first.");
+  if (!user) throw new ConvexError("User not found. Complete signup first.");
   return user;
 }
 
@@ -59,7 +60,6 @@ export const syncUser = mutation({
     return await ctx.db.insert("users", {
       privyId,
       username: `player_${Date.now()}`,
-      avatarPath: DEFAULT_SIGNUP_AVATAR_PATH,
       email,
       createdAt: Date.now(),
     });
@@ -83,14 +83,7 @@ export const currentUser = query({
 });
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
-const DEFAULT_SIGNUP_AVATAR_PATH = "avatars/signup/avatar-001.png";
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
-const VALID_SIGNUP_AVATAR_PATHS = new Set(
-  Array.from({ length: 29 }, (_, index) => {
-    const suffix = String(index + 1).padStart(3, "0");
-    return `avatars/signup/avatar-${suffix}.png`;
-  }),
-);
 const normalizeDeckId = (deckId: string | undefined): string | null => {
   if (!deckId) return null;
   const trimmed = deckId.trim();
@@ -128,7 +121,7 @@ export const getOnboardingStatus = query({
     return {
       exists: true,
       hasUsername: !user.username.startsWith("player_"),
-      hasAvatar: Boolean(user.avatarPath),
+      hasAvatar: isValidSignupAvatarPath(user.avatarPath),
       hasStarterDeck: hasActiveDeck,
     };
   },
@@ -145,7 +138,7 @@ export const setUsername = mutation({
     // Validate: 3-20 chars, alphanumeric + underscores
     const trimmed = args.username.trim();
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(trimmed)) {
-      throw new Error(
+      throw new ConvexError(
         "Username must be 3-20 characters, alphanumeric and underscores only."
       );
     }
@@ -155,7 +148,7 @@ export const setUsername = mutation({
       .withIndex("by_username", (q) => q.eq("username", trimmed))
       .first();
     if (taken && taken._id !== user._id) {
-      throw new Error("Username is already taken.");
+      throw new ConvexError("Username is already taken.");
     }
     await ctx.db.patch(user._id, { username: trimmed });
     return { success: true };
@@ -169,11 +162,8 @@ export const setAvatarPath = mutation({
   args: { avatarPath: v.string() },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const avatarPath = args.avatarPath.trim();
-
-    if (!VALID_SIGNUP_AVATAR_PATHS.has(avatarPath)) {
-      throw new Error("Invalid avatar selection.");
-    }
+    const avatarPath = normalizeSignupAvatarPath(args.avatarPath);
+    if (!avatarPath) throw new ConvexError("Invalid avatar selection.");
 
     await ctx.db.patch(user._id, { avatarPath });
     return { success: true, avatarPath };
