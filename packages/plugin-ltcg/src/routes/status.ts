@@ -13,6 +13,7 @@
  */
 
 import { getClient } from "../client.js";
+import { getEnvValue } from "../env.js";
 import type { Route, RouteRequest, RouteResponse, IAgentRuntime } from "../types.js";
 import type { MatchActive } from "../types.js";
 
@@ -26,7 +27,7 @@ const buildStatusHandler = async (
     const matchId = client.currentMatchId;
     const soundtrackEndpoint =
       runtime.getSetting("LTCG_SOUNDTRACK_API_URL") ||
-      process.env.LTCG_SOUNDTRACK_API_URL ||
+      getEnvValue("LTCG_SOUNDTRACK_API_URL") ||
       null;
 
     // Build status payload

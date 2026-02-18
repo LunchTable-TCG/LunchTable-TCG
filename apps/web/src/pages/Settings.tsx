@@ -1,12 +1,12 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useConvexAuth } from "convex/react";
-import * as Sentry from "@sentry/react";
 import { toast } from "sonner";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { blob } from "@/lib/blobUrls";
 import { useAudio } from "@/components/audio/AudioProvider";
 import { TrayNav } from "@/components/layout/TrayNav";
+import { captureError, trackEvent } from "@/lib/telemetry";
 import {
   DEFAULT_SIGNUP_AVATAR_PATH,
   SIGNUP_AVATAR_OPTIONS,
@@ -117,8 +117,12 @@ export function Settings() {
     try {
       await setUsernameMutation({ username: trimmed });
       toast.success("Username saved.");
+      trackEvent("settings_username_saved", {
+        username: trimmed,
+        action: "save_username",
+      });
     } catch (err: unknown) {
-      Sentry.captureException(err);
+      captureError(err, { action: "save_username", username: trimmed });
       const message = err instanceof Error ? err.message : "Could not save username.";
       toast.error(message);
     } finally {
@@ -137,8 +141,12 @@ export function Settings() {
     try {
       await setAvatarPathMutation({ avatarPath });
       toast.success("Avatar saved.");
+      trackEvent("settings_avatar_saved", {
+        avatarPath,
+        action: "save_avatar",
+      });
     } catch (err: unknown) {
-      Sentry.captureException(err);
+      captureError(err, { action: "save_avatar", avatarPath });
       const message = err instanceof Error ? err.message : "Could not save avatar.";
       toast.error(message);
     } finally {

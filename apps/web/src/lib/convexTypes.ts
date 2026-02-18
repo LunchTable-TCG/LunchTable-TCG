@@ -3,12 +3,22 @@ export type Seat = "host" | "away";
 export type MatchMode = "pvp" | "story";
 export type MatchStatus = "waiting" | "active" | "ended";
 
+export const cliqueAssignmentStatuses = {
+  assigned: "assigned",
+  alreadyAssigned: "already_assigned",
+  missingStarterDeck: "missing_starter_deck",
+  missingClique: "missing_clique",
+} as const;
+
+export type CliqueAssignmentStatusKind =
+  (typeof cliqueAssignmentStatuses)[keyof typeof cliqueAssignmentStatuses];
+
 export type MatchMeta = {
   _id: string;
   _creationTime: number;
   hostId: string;
   awayId: string | null;
-  mode: MatchStatus;
+  mode: MatchMode;
   status: MatchStatus;
   winner?: Seat | null;
   endReason?: string;
@@ -32,8 +42,8 @@ export type StoryMatchContext = {
   rewardsXp: number;
   firstClearBonus: number;
   opponentName: string;
-  postMatchWinDialogue: string[];
-  postMatchLoseDialogue: string[];
+  postMatchWinDialogue: Array<{ speaker: string; text: string; avatar?: string }>;
+  postMatchLoseDialogue: Array<{ speaker: string; text: string; avatar?: string }>;
 };
 
 export type MatchEventBatch = {
@@ -50,7 +60,7 @@ export type OpenPrompt = {
   matchId: string;
   seat: Seat;
   promptType: "chain_response" | "optional_trigger" | "replay_decision" | "discard";
-  data?: string;
+  data?: unknown;
   resolved: boolean;
   createdAt: number;
   resolvedAt?: number;
@@ -89,25 +99,63 @@ export type CardDefinition = {
 export type GameCardInstance = {
   cardId: string;
   definitionId: string;
+  position?: "attack" | "defense";
   faceDown?: boolean;
   canAttack?: boolean;
   hasAttackedThisTurn?: boolean;
+  changedPositionThisTurn?: boolean;
+  viceCounters?: number;
   turnSummoned?: number;
   temporaryBoosts?: {
     attack?: number;
+    defense?: number;
   };
+  equippedCards?: string[];
+};
+
+export type GameSpellTrapInstance = {
+  cardId: string;
+  definitionId: string;
+  faceDown?: boolean;
+  activated?: boolean;
+  isFieldSpell?: boolean;
+};
+
+export type ChainLink = {
+  cardId: string;
+  effectIndex: number;
+  activatingPlayer: Seat;
+  targets: string[];
 };
 
 export type PlayerView = {
-  currentTurnPlayer?: Seat;
-  mySeat?: Seat;
-  currentPhase?: "draw" | "standby" | "breakdown_check" | "main" | "main2" | "combat" | "end";
-  gameOver?: boolean;
-  turnNumber?: number;
-  board?: GameCardInstance[];
-  opponentBoard?: GameCardInstance[];
-  hand?: string[];
-  spellTrapZone?: Array<{ cardId: string; definitionId: string; faceDown?: boolean; } >;
+  currentTurnPlayer: Seat;
+  mySeat: Seat;
+  currentPhase: "draw" | "standby" | "breakdown_check" | "main" | "main2" | "combat" | "end";
+  currentPriorityPlayer: Seat | null;
+  gameOver: boolean;
+  turnNumber: number;
+  board: GameCardInstance[];
+  opponentBoard: GameCardInstance[];
+  hand: string[];
+  spellTrapZone: GameSpellTrapInstance[];
+  fieldSpell: GameSpellTrapInstance | null;
+  graveyard: string[];
+  banished: string[];
+  lifePoints: number;
+  deckCount: number;
+  breakdownsCaused: number;
+  opponentHandCount: number;
+  opponentSpellTrapZone: GameSpellTrapInstance[];
+  opponentFieldSpell: GameSpellTrapInstance | null;
+  opponentGraveyard: string[];
+  opponentBanished: string[];
+  opponentLifePoints: number;
+  opponentDeckCount: number;
+  opponentBreakdownsCaused: number;
+  currentChain: ChainLink[];
+  winner: Seat | null;
+  winReason: "lp_zero" | "deck_out" | "breakdown" | "surrender" | null;
   players?: {
     host?: {
       lifePoints?: number;
@@ -117,11 +165,6 @@ export type PlayerView = {
     };
   };
   turnPlayer?: Seat;
-  lifePoints?: {
-    host?: number;
-    away?: number;
-  };
-  currentChain?: unknown[];
   gameResult?: string;
 };
 
@@ -142,9 +185,9 @@ export type StoryChapterStage = {
   description: string;
   opponentName?: string;
   difficulty?: string;
-  preMatchDialogue?: string[];
-  postMatchWinDialogue?: string[];
-  postMatchLoseDialogue?: string[];
+  preMatchDialogue?: Array<{ speaker: string; text: string; avatar?: string }>;
+  postMatchWinDialogue?: Array<{ speaker: string; text: string; avatar?: string }>;
+  postMatchLoseDialogue?: Array<{ speaker: string; text: string; avatar?: string }>;
   rewardGold?: number;
   rewardXp?: number;
   firstClearBonus?: number;
@@ -240,19 +283,24 @@ export type CliqueAssignmentStatusBase = { reason: string };
 
 export type CliqueAssignmentStatus =
   | {
-      status: "assigned";
+      status: (typeof cliqueAssignmentStatuses)["assigned"];
       clique: Clique;
       archetype: string;
+      reason: string;
     }
   | {
-      status: "already_assigned";
+      status: (typeof cliqueAssignmentStatuses)["alreadyAssigned"];
       clique: Clique;
       archetype: string;
+      reason: string;
     }
   | ({
-      status: "missing_starter_deck";
+      status: (typeof cliqueAssignmentStatuses)["missingStarterDeck"];
+      clique: null;
+      archetype: null;
     } & CliqueAssignmentStatusBase)
   | ({
-      status: "missing_clique";
+      status: (typeof cliqueAssignmentStatuses)["missingClique"];
+      clique: null;
       archetype: string;
     } & CliqueAssignmentStatusBase);

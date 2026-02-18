@@ -1,4 +1,4 @@
-import type { BoardCard } from "@lunchtable-tcg/engine";
+import type { BoardCard } from "./types";
 import { BoardSlot } from "./BoardSlot";
 
 interface FieldRowProps {

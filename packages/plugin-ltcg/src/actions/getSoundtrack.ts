@@ -6,6 +6,7 @@
  */
 
 import { getClient } from "../client.js";
+import { getEnvValue } from "../env.js";
 import type {
   Action,
   HandlerCallback,
@@ -29,7 +30,7 @@ type SoundtrackPayload = {
 function getSoundtrackEndpoint(runtime: IAgentRuntime): string {
   return (
     runtime.getSetting("LTCG_SOUNDTRACK_API_URL") ||
-    process.env.LTCG_SOUNDTRACK_API_URL ||
+    getEnvValue("LTCG_SOUNDTRACK_API_URL") ||
     ""
   );
 }

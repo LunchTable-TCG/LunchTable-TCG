@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import type { BoardCard } from "@lunchtable-tcg/engine";
+import type { BoardCard } from "./types";
 
 interface BoardSlotProps {
   card?: BoardCard;
@@ -62,9 +62,9 @@ export function BoardSlot({ card, cardDef, highlight, onClick }: BoardSlotProps)
       </div>
 
       {/* Vice counter badge */}
-      {card.viceCounters > 0 && (
+      {(card.viceCounters ?? 0) > 0 && (
         <div className="absolute top-0 right-0 bg-red-600 text-white text-[8px] font-black rounded-full w-4 h-4 flex items-center justify-center">
-          {card.viceCounters}
+          {card.viceCounters ?? 0}
         </div>
       )}
 

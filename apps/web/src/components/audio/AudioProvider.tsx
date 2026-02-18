@@ -14,15 +14,46 @@ import {
   type SoundtrackManifest,
 } from "@/lib/audio/soundtrack";
 import { MUSIC_BUTTON } from "@/lib/blobUrls";
+import { captureError, trackEvent } from "@/lib/telemetry";
 
 const AUDIO_SETTINGS_STORAGE_KEY = "ltcg.audio.settings.v1";
 const AUDIO_DOCK_MODE_STORAGE_KEY = "ltcg.audio.dock.mode.v1";
+const AUDIO_PLAYBACK_INTENT_STORAGE_KEY = "ltcg.audio.playback.intent.v1";
 const SOUNDTRACK_MANIFEST_SOURCE = "/api/soundtrack";
 const MUSIC_BUTTON_FALLBACK = "/lunchtable/music-button.png";
+type AudioPlaybackIntent = "playing" | "paused" | "stopped";
+const VALID_AUDIO_PLAYBACK_INTENTS = new Set<AudioPlaybackIntent>([
+  "playing",
+  "paused",
+  "stopped",
+]);
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
+}
+
+function normalizeStoredVolume(value: unknown, fallback: number): number {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(numericValue)) return fallback;
+  const normalized = numericValue >= 1 ? numericValue / 100 : numericValue;
+  return clamp01(normalized);
+}
+
+function normalizeStoredBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off", ""].includes(normalized)) return false;
+  }
+  return fallback;
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -54,21 +85,57 @@ function parseStoredSettings(raw: string | null): AudioSettings {
   if (typeof window === "undefined") return DEFAULT_AUDIO_SETTINGS;
   try {
     if (!raw) return DEFAULT_AUDIO_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<AudioSettings>;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     return {
-      musicVolume: clamp01(parsed.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume),
-      sfxVolume: clamp01(parsed.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.sfxVolume),
-      musicMuted: Boolean(parsed.musicMuted),
-      sfxMuted: Boolean(parsed.sfxMuted),
+      musicVolume: normalizeStoredVolume(parsed.musicVolume, DEFAULT_AUDIO_SETTINGS.musicVolume),
+      sfxVolume: normalizeStoredVolume(parsed.sfxVolume, DEFAULT_AUDIO_SETTINGS.sfxVolume),
+      musicMuted: normalizeStoredBoolean(
+        parsed.musicMuted,
+        DEFAULT_AUDIO_SETTINGS.musicMuted,
+      ),
+      sfxMuted: normalizeStoredBoolean(parsed.sfxMuted, DEFAULT_AUDIO_SETTINGS.sfxMuted),
     };
   } catch {
     return DEFAULT_AUDIO_SETTINGS;
   }
 }
 
+function parseStoredPlaybackIntent(raw: string | null): AudioPlaybackIntent {
+  if (raw === "playing" || raw === "paused" || raw === "stopped") return raw;
+  if (!raw) return "playing";
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed === "string" &&
+      VALID_AUDIO_PLAYBACK_INTENTS.has(parsed as AudioPlaybackIntent)
+    ) {
+      return parsed as AudioPlaybackIntent;
+    }
+  } catch {
+    // Fallback below.
+  }
+
+  return "playing";
+}
+
 function loadStoredSettings(): AudioSettings {
   if (typeof window === "undefined") return DEFAULT_AUDIO_SETTINGS;
   return parseStoredSettings(window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY));
+}
+
+function loadStoredPlaybackIntent(): AudioPlaybackIntent {
+  if (typeof window === "undefined") return "playing";
+  return parseStoredPlaybackIntent(window.localStorage.getItem(AUDIO_PLAYBACK_INTENT_STORAGE_KEY));
+}
+
+function saveStoredPlaybackIntent(intent: AudioPlaybackIntent): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(AUDIO_PLAYBACK_INTENT_STORAGE_KEY, intent);
+  } catch {
+    // Ignore storage errors so local audio prefs never break playback.
+  }
 }
 
 interface AudioContextValue {
@@ -120,7 +187,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const shuffleModeRef = useRef(false);
   const repeatModeRef = useRef<RepeatMode>(repeatMode);
   const unlockedRef = useRef(false);
-  const manualPauseRef = useRef(false);
+  const playbackIntentRef = useRef<AudioPlaybackIntent>(loadStoredPlaybackIntent());
 
   settingsRef.current = settings;
   soundtrackRef.current = soundtrack;
@@ -186,10 +253,19 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     try {
       await audio.play();
       setAutoplayBlocked(false);
-    } catch {
+      trackEvent("audio_play_attempt", {
+        action: "play",
+        context: contextKey,
+      });
+    } catch (error) {
       setAutoplayBlocked(true);
+      captureError(error, { action: "audio_play_attempt", context: contextKey });
+      trackEvent("audio_play_failed", {
+        action: "play",
+        context: contextKey,
+      });
     }
-  }, []);
+  }, [contextKey]);
 
   const preloadTrack = useCallback((trackUrl: string) => {
     const preload = musicPreloadRef.current;
@@ -202,13 +278,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const setPlaybackIntent = useCallback((intent: AudioPlaybackIntent) => {
+    if (playbackIntentRef.current === intent) return;
+    playbackIntentRef.current = intent;
+    saveStoredPlaybackIntent(intent);
+    trackEvent("audio_playback_intent_set", {
+      context: contextKey,
+      intent,
+      isPlaying: intent === "playing",
+    });
+  }, [contextKey]);
+
   const playTrackAtIndex = useCallback(
-    (index: number) => {
+    (index: number, options?: { forcePlay?: boolean }) => {
       const audio = musicAudioRef.current;
       const queue = currentQueueRef.current;
       if (!audio || queue.length === 0 || index < 0 || index >= queue.length) return;
 
-      manualPauseRef.current = false;
       const next = queue[index]!;
       trackIndexRef.current = index;
       setCurrentTrack(next);
@@ -231,11 +317,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const prefetchTrack = queue[prefetchIndex];
       if (prefetchTrack) preloadTrack(prefetchTrack);
 
-      if (unlockedRef.current) {
+      const shouldPlay = options?.forcePlay || playbackIntentRef.current === "playing";
+      if (unlockedRef.current && shouldPlay) {
         void safePlay(audio);
       }
     },
-    [safePlay, preloadTrack],
+    [safePlay, preloadTrack, playbackIntentRef],
   );
 
   const advanceTrack = useCallback(
@@ -251,7 +338,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       let nextIndex = trackIndexRef.current + 1;
       if (nextIndex >= queue.length) {
         if (trigger === "ended" && repeatModeRef.current === "off") {
-          manualPauseRef.current = true;
+          setPlaybackIntent("stopped");
           const audio = musicAudioRef.current;
           if (audio) {
             audio.pause();
@@ -268,7 +355,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
       playTrackAtIndex(nextIndex);
     },
-    [playTrackAtIndex],
+    [playTrackAtIndex, setPlaybackIntent],
   );
 
   useEffect(() => {
@@ -287,7 +374,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const currentSettings = settingsRef.current;
       if (!current.src) return;
       if (currentSettings.musicMuted || currentSettings.musicVolume <= 0) return;
-      if (manualPauseRef.current) return;
+      if (playbackIntentRef.current !== "playing") return;
       void safePlay(current);
     };
 
@@ -308,7 +395,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       try {
         const manifest = await loadSoundtrackManifest(SOUNDTRACK_MANIFEST_SOURCE);
         if (!cancelled) setSoundtrack(manifest);
-      } catch {
+      } catch (error) {
+        captureError(error, { action: "audio_manifest_load_failed", source: SOUNDTRACK_MANIFEST_SOURCE });
+        trackEvent("audio_manifest_load_failed", {
+          source: SOUNDTRACK_MANIFEST_SOURCE,
+        });
         if (!cancelled) {
           setSoundtrack({
             playlists: { default: [] },
@@ -339,7 +430,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (audio.src && audio.paused && unlockedRef.current && !manualPauseRef.current) {
+    if (
+      audio.src &&
+      audio.paused &&
+      unlockedRef.current &&
+      playbackIntentRef.current === "playing"
+    ) {
       void safePlay(audio);
     }
   }, [settings.musicMuted, settings.musicVolume, safePlay]);
@@ -354,7 +450,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     currentQueueRef.current = queue;
 
     if (queue.length === 0) {
-      manualPauseRef.current = true;
+      setPlaybackIntent("stopped");
       const audio = musicAudioRef.current;
       if (audio) {
         audio.pause();
@@ -374,6 +470,21 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       // Ignore storage failures (private mode, quota exceeded, blocked storage)
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== AUDIO_PLAYBACK_INTENT_STORAGE_KEY) return;
+      const nextIntent = parseStoredPlaybackIntent(event.newValue);
+      setPlaybackIntent(nextIntent);
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [setPlaybackIntent]);
 
   const playSfx = useCallback((sfxId: string) => {
     const manifest = soundtrackRef.current;
@@ -399,9 +510,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const pauseMusic = useCallback(() => {
     const audio = musicAudioRef.current;
     if (!audio) return;
-    manualPauseRef.current = true;
+    setPlaybackIntent("paused");
     audio.pause();
-  }, []);
+    trackEvent("audio_paused", {
+      action: "pause",
+      context: contextKey,
+      track: currentTrack,
+    });
+  }, [setPlaybackIntent, contextKey, currentTrack]);
 
   const resumeMusic = useCallback(() => {
     const audio = musicAudioRef.current;
@@ -410,38 +526,48 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const currentSettings = settingsRef.current;
     if (currentSettings.musicMuted || currentSettings.musicVolume <= 0) return;
 
-    manualPauseRef.current = false;
+    setPlaybackIntent("playing");
+    trackEvent("audio_resumed", {
+      action: "resume",
+      context: contextKey,
+      track: currentTrack,
+    });
 
     if (!audio.src) {
       const queue = currentQueueRef.current;
       if (queue.length === 0) return;
       const index = Math.min(Math.max(trackIndexRef.current, 0), queue.length - 1);
-      playTrackAtIndex(index);
+      playTrackAtIndex(index, { forcePlay: true });
       return;
     }
 
     void safePlay(audio);
-  }, [playTrackAtIndex, safePlay]);
+  }, [playTrackAtIndex, safePlay, setPlaybackIntent, contextKey, currentTrack]);
 
   const stopMusic = useCallback(() => {
     const audio = musicAudioRef.current;
     if (!audio) return;
-    manualPauseRef.current = true;
+    setPlaybackIntent("stopped");
     audio.pause();
     audio.currentTime = 0;
-  }, []);
+    trackEvent("audio_stopped", {
+      action: "stop",
+      context: contextKey,
+      track: currentTrack,
+    });
+  }, [setPlaybackIntent, contextKey, currentTrack]);
 
   const skipToNextTrack = useCallback(() => {
-    manualPauseRef.current = false;
+    setPlaybackIntent("playing");
     advanceTrack("manual");
-  }, [advanceTrack]);
+  }, [advanceTrack, setPlaybackIntent]);
 
   const skipToPreviousTrack = useCallback(() => {
     const audio = musicAudioRef.current;
     const queue = currentQueueRef.current;
     if (!audio || queue.length === 0) return;
 
-    manualPauseRef.current = false;
+    setPlaybackIntent("playing");
     if (audio.currentTime > 5) {
       audio.currentTime = 0;
       if (audio.paused) void safePlay(audio);
@@ -451,7 +577,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     let previousIndex = trackIndexRef.current - 1;
     if (previousIndex < 0) previousIndex = queue.length - 1;
     playTrackAtIndex(previousIndex);
-  }, [playTrackAtIndex, safePlay]);
+  }, [playTrackAtIndex, safePlay, setPlaybackIntent]);
 
   const togglePlayPause = useCallback(() => {
     const audio = musicAudioRef.current;

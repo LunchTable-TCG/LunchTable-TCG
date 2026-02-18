@@ -51,7 +51,7 @@ export function Profile() {
   const hasDecks = decks !== undefined;
   const joinedOn = formatJoinedTime(currentUser?.createdAt);
   const displayName = currentUser?.name || currentUser?.username || "Player";
-  const avatarUrl = blob(currentUser.avatarPath ?? DEFAULT_SIGNUP_AVATAR_PATH);
+  const avatarUrl = blob(currentUser?.avatarPath ?? DEFAULT_SIGNUP_AVATAR_PATH);
 
   if (currentUser === undefined) {
     return (

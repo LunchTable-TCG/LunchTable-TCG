@@ -124,7 +124,7 @@ export const playStoryAction: Action = {
 
       const preMatchDialogue = stageData?.narrative?.preMatchDialogue;
       if (preMatchDialogue?.length) {
-        log.push(`"${preMatchDialogue.join(" ")}"`);
+        log.push(formatDialogue(preMatchDialogue));
       }
 
       if (callback) {
@@ -191,7 +191,7 @@ export const playStoryAction: Action = {
             ? stageData.narrative?.postMatchWinDialogue
             : stageData.narrative?.postMatchLoseDialogue;
           if (postDialogue?.length) {
-            log.push(`"${postDialogue.join(" ")}"`);
+            log.push(formatDialogue(postDialogue));
           }
         }
       } catch (err) {
@@ -264,22 +264,58 @@ export const playStoryAction: Action = {
   ],
 };
 
+function formatDialogue(dialogue: unknown): string {
+  if (!Array.isArray(dialogue)) {
+    return "";
+  }
+
+  const lines = dialogue
+    .map((line) => {
+      if (!line || typeof line !== "object") return "";
+      const entry = line as Record<string, unknown>;
+      const speaker = typeof entry.speaker === "string" ? entry.speaker.trim() : "";
+      const text = typeof entry.text === "string" ? entry.text.trim() : "";
+
+      if (!text) return "";
+      if (speaker) return `${speaker}: ${text}`;
+      return text;
+    })
+    .filter(Boolean)
+    .join(" ");
+
+  return lines ? `"${lines}"` : "";
+}
+
 function resolveLifePoints(
   view: {
-    players: {
+    players?: {
       host: { lifePoints: number };
       away: { lifePoints: number };
     };
+    lifePoints?: number;
+    opponentLifePoints?: number;
   },
   seat: MatchActive["seat"],
 ) {
+  if (view.lifePoints !== undefined || view.opponentLifePoints !== undefined) {
+    return seat === "host"
+      ? {
+          myLP: view.lifePoints ?? view.opponentLifePoints ?? 0,
+          oppLP: view.opponentLifePoints ?? view.lifePoints ?? 0,
+        }
+      : {
+          myLP: view.opponentLifePoints ?? view.lifePoints ?? 0,
+          oppLP: view.lifePoints ?? view.opponentLifePoints ?? 0,
+        };
+  }
+
   return seat === "host"
     ? {
-      myLP: view.players.host.lifePoints,
-      oppLP: view.players.away.lifePoints,
-    }
+        myLP: view.players?.host?.lifePoints ?? 0,
+        oppLP: view.players?.away?.lifePoints ?? 0,
+      }
     : {
-      myLP: view.players.away.lifePoints,
-      oppLP: view.players.host.lifePoints,
-    };
+        myLP: view.players?.away?.lifePoints ?? 0,
+        oppLP: view.players?.host?.lifePoints ?? 0,
+      };
 }

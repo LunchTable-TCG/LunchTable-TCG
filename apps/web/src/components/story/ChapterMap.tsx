@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
 import { motion } from "framer-motion";
+import { useMemo } from "react";
 import { useStory } from "./StoryProvider";
 
 import {
@@ -71,7 +72,17 @@ const panelVariant = {
 
 export function ChapterMap() {
   const navigate = useNavigate();
-  const { chapters, isLoading, isChapterComplete, totalStars } = useStory();
+  const { chapters, isLoading, isChapterComplete, isChapterUnlocked, totalStars } = useStory();
+
+  const sortedChapters = useMemo(() => {
+    return [...(chapters ?? [])].sort((a, b) => {
+      const actDiff = (a.actNumber ?? 0) - (b.actNumber ?? 0);
+      if (actDiff !== 0) return actDiff;
+      const chapterDiff = (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0);
+      if (chapterDiff !== 0) return chapterDiff;
+      return 0;
+    });
+  }, [chapters]);
 
   return (
     <div
@@ -128,12 +139,9 @@ export function ChapterMap() {
             initial="hidden"
             animate="visible"
           >
-            {chapters.map((chapter, i) => {
+            {sortedChapters.map((chapter, i) => {
               const completed = isChapterComplete(chapter._id);
-              const prevChapter = chapters[i - 1];
-              const prevCompleted =
-                i === 0 || (prevChapter && isChapterComplete(prevChapter._id));
-              const locked = !completed && !prevCompleted;
+              const locked = !completed && !isChapterUnlocked(chapter._id);
               const layout = PANEL_LAYOUTS[i % PANEL_LAYOUTS.length];
               const rotation = ((i * 7 + 3) % 5) - 2;
 

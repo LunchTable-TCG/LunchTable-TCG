@@ -35,7 +35,7 @@ export const gameStateProvider: Provider = {
     const matchId = client.currentMatchId;
     if (!matchId) {
       return {
-        text: "No active LunchTable match. Use START_DUEL (alias for START_LTCG_DUEL) or START_BATTLE (alias for START_LTCG_BATTLE) to begin.",
+        text: "No active LunchTable match. Use START_DUEL (alias for START_LTCG_DUEL), START_BATTLE (alias for START_LTCG_BATTLE), or JOIN_LTCG_MATCH (for human-hosted match) to begin.",
       };
     }
 

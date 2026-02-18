@@ -499,6 +499,121 @@ describe("Combat", () => {
     expect(events).toHaveLength(0);
   });
 
+  it("Resolves duplicate attacker card IDs when only one instance is attack-eligible", () => {
+    let state = createCombatState();
+    state.currentPhase = "combat";
+    state.turnNumber = 2;
+
+    state = addMonsterToBoard(state, "host", "monster1", "attack", false, true, true);
+    state = addMonsterToBoard(state, "host", "monster1", "attack", false, true, false);
+    state = addMonsterToBoard(state, "away", "monster2", "attack", false, true, false);
+
+    const engine = createEngine({
+      cardLookup,
+      hostId: "host-player",
+      awayId: "away-player",
+      hostDeck: [],
+      awayDeck: [],
+      firstPlayer: "host",
+    });
+
+    Object.assign(engine.getState(), state);
+
+    const events = engine.decide(
+      {
+        type: "DECLARE_ATTACK",
+        attackerId: "monster1",
+        targetId: "monster2",
+      },
+      "host",
+    );
+
+    expect(events).toHaveLength(5);
+    expect(events[0]).toEqual({
+      type: "ATTACK_DECLARED",
+      seat: "host",
+      attackerId: "monster1",
+      targetId: "monster2",
+    });
+
+    engine.evolve(events);
+    const newState = engine.getState();
+    expect(newState.hostBoard).toHaveLength(1);
+    expect(newState.hostBoard[0].hasAttackedThisTurn).toBe(true);
+  });
+
+  it("Rejects ambiguous duplicate attacker card IDs without explicit slot", () => {
+    let state = createCombatState();
+    state.currentPhase = "combat";
+    state.turnNumber = 2;
+
+    state = addMonsterToBoard(state, "host", "monster1", "attack");
+    state = addMonsterToBoard(state, "host", "monster1", "attack");
+    state = addMonsterToBoard(state, "away", "monster2", "attack");
+
+    const engine = createEngine({
+      cardLookup,
+      hostId: "host-player",
+      awayId: "away-player",
+      hostDeck: [],
+      awayDeck: [],
+      firstPlayer: "host",
+    });
+
+    Object.assign(engine.getState(), state);
+
+    const events = engine.decide(
+      {
+        type: "DECLARE_ATTACK",
+        attackerId: "monster1",
+        targetId: "monster2",
+      },
+      "host",
+    );
+
+    expect(events).toHaveLength(0);
+  });
+
+  it("Can use explicit attackerSlot to disambiguate duplicate attacker instances", () => {
+    let state = createCombatState();
+    state.currentPhase = "combat";
+    state.turnNumber = 2;
+
+    state = addMonsterToBoard(state, "host", "monster1", "attack", false, true, true);
+    state = addMonsterToBoard(state, "host", "monster1", "attack", false, true, false);
+    state = addMonsterToBoard(state, "away", "monster2", "attack", false, true, false);
+
+    const engine = createEngine({
+      cardLookup,
+      hostId: "host-player",
+      awayId: "away-player",
+      hostDeck: [],
+      awayDeck: [],
+      firstPlayer: "host",
+    });
+
+    Object.assign(engine.getState(), state);
+
+    const events = engine.decide(
+      {
+        type: "DECLARE_ATTACK",
+        attackerId: "monster1",
+        attackerSlot: 1,
+        targetId: "monster2",
+      },
+      "host",
+    );
+
+    expect(events).toHaveLength(5);
+    expect(events[0]).toEqual({
+      type: "ATTACK_DECLARED",
+      seat: "host",
+      attackerId: "monster1",
+      targetId: "monster2",
+      attackerSlot: 1,
+    });
+  });
+
   it("Reject attack when not in combat phase", () => {
     let state = createCombatState();
     state.currentPhase = "main"; // Not combat phase

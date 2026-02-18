@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "react-router";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useParams, useNavigate } from "react-router";
 import * as Sentry from "@sentry/react";
 import { apiAny, useConvexQuery, useConvexMutation } from "@/lib/convexHelpers";
 import {
@@ -8,6 +8,7 @@ import {
   DialogueBox,
   BattleTransition,
   useStory,
+  type DialogueLine,
 } from "@/components/story";
 import { GameBoard } from "@/components/game/GameBoard";
 import { type Seat } from "@/components/game/hooks/useGameState";
@@ -44,8 +45,13 @@ type StoryContext = {
   rewardsXp: number;
   firstClearBonus: number;
   opponentName: string;
-  postMatchWinDialogue: string[];
-  postMatchLoseDialogue: string[];
+  preMatchDialogue: DialogueLine[];
+  postMatchWinDialogue: DialogueLine[];
+  postMatchLoseDialogue: DialogueLine[];
+};
+
+type Stage = {
+  stageNumber: number;
 };
 
 type StoryMatchEnd = {
@@ -104,8 +110,13 @@ export function Play() {
   }
 
   return (
-    <StoryProvider>
-      <StoryPlayFlow matchId={activeMatchId} playerSeat={playerSeat} meta={meta} storyCtx={storyCtx} />
+    <StoryProvider key={`story-play-${activeMatchId}`}>
+      <StoryPlayFlow
+        matchId={activeMatchId}
+        playerSeat={playerSeat}
+        meta={meta}
+        storyCtx={storyCtx}
+      />
       <DialogueBox />
       <BattleTransition />
     </StoryProvider>
@@ -120,14 +131,27 @@ type StoryPlayFlowProps = {
 };
 
 function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowProps) {
+  const navigate = useNavigate();
   const { pushEvents } = useStory();
   const completeStage = useConvexMutation(apiAny.game.completeStoryStage);
+  const startBattle = useConvexMutation(apiAny.game.startStoryBattle);
+  const startBattleForAgent = useConvexMutation(apiAny.game.startStoryBattleForAgent);
+  const cancelStoryMatch = useConvexMutation(apiAny.game.cancelWaitingStoryMatch);
+  const chapterStages = useConvexQuery(
+    apiAny.game.getChapterStages,
+    storyCtx?.chapterId ? { chapterId: storyCtx.chapterId } : "skip",
+  ) as Stage[] | undefined;
   const [completion, setCompletion] = useState<StoryCompletion | null>(null);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isStartingNext, setIsStartingNext] = useState(false);
+  const [error, setError] = useState("");
+  const [agentNextMatchId, setAgentNextMatchId] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
   const [eventCursor, setEventCursor] = useState(0);
   const [eventLog, setEventLog] = useState<string[]>([]);
   const storyDoneRef = useRef(false);
   const dialogueQueuedRef = useRef(false);
+  const preMatchQueuedRef = useRef(false);
   const eventCursorRef = useRef(0);
 
   const rawEvents = useConvexQuery(
@@ -137,6 +161,21 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
 
   const outcome = resolveStoryWon(meta?.winner, playerSeat);
   const won = completion ? completion.outcome === "won" : outcome;
+
+  useEffect(() => {
+    eventCursorRef.current = 0;
+    setEventCursor(0);
+    setEventLog([]);
+    setCompletion(null);
+    setIsCompleting(false);
+    setIsStartingNext(false);
+    setError("");
+    setAgentNextMatchId(null);
+    setCopyMessage("");
+    storyDoneRef.current = false;
+    dialogueQueuedRef.current = false;
+    preMatchQueuedRef.current = false;
+  }, [matchId]);
 
   useEffect(() => {
     if (!rawEvents || rawEvents.length === 0) return;
@@ -174,6 +213,19 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
     }
   }, [rawEvents]);
 
+  const preMatchDialogue = useMemo<DialogueLine[]>(() => {
+    if (!storyCtx?.preMatchDialogue) return [];
+    return normalizeDialogueLines(storyCtx.preMatchDialogue);
+  }, [storyCtx?.preMatchDialogue]);
+
+  useEffect(() => {
+    if (completion || preMatchQueuedRef.current) return;
+    if (!storyCtx || !preMatchDialogue.length) return;
+
+    pushEvents([{ type: "dialogue", lines: preMatchDialogue }]);
+    preMatchQueuedRef.current = true;
+  }, [completion, preMatchDialogue, storyCtx, pushEvents]);
+
   useEffect(() => {
     if (!completion || dialogueQueuedRef.current) return;
     if (!storyCtx) return;
@@ -186,6 +238,105 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
 
     dialogueQueuedRef.current = true;
   }, [completion, storyCtx, pushEvents]);
+
+  const nextStageNumber = useMemo(() => {
+    if (!storyCtx?.chapterId || !storyCtx?.stageNumber) return null;
+    if (!chapterStages || chapterStages.length === 0) return null;
+
+    const sortedStages = [...chapterStages].sort((a, b) => a.stageNumber - b.stageNumber);
+    const maxStage = sortedStages.at(-1)?.stageNumber;
+    if (!maxStage) return null;
+
+    const nextStage = storyCtx.stageNumber + 1;
+    return nextStage <= maxStage ? nextStage : null;
+  }, [storyCtx?.chapterId, storyCtx?.stageNumber, chapterStages]);
+
+  const handleStartNextStage = useCallback(async () => {
+    if (!storyCtx?.chapterId) {
+      setError("Unable to start the next stage right now.");
+      return;
+    }
+
+    if (nextStageNumber === null) {
+      setError("There are no more stages available in this chapter.");
+      return;
+    }
+
+    if (!chapterStages) {
+      setError("Loading chapter stages to validate the next unlock.");
+      return;
+    }
+
+    setIsStartingNext(true);
+    setError("");
+
+    try {
+      if (meta.isAIOpponent) {
+        const result = (await startBattle({
+          chapterId: storyCtx.chapterId,
+          stageNumber: nextStageNumber,
+        }) as { matchId?: string });
+        const nextMatchId = normalizeMatchId(
+          typeof result?.matchId === "string" ? result.matchId : null,
+        );
+        if (!nextMatchId) {
+          throw new Error("No match ID was returned from the next battle.");
+        }
+
+        navigate(`/play/${nextMatchId}`);
+      } else {
+        const result = (await startBattleForAgent({
+          chapterId: storyCtx.chapterId,
+          stageNumber: nextStageNumber,
+        }) as { matchId?: string });
+        const nextMatchId = normalizeMatchId(
+          typeof result?.matchId === "string" ? result.matchId : null,
+        );
+        if (!nextMatchId) {
+          throw new Error("No match ID was returned from the next battle.");
+        }
+
+        setAgentNextMatchId(nextMatchId);
+      }
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setError(err.message ?? "Failed to start next stage.");
+    } finally {
+      setIsStartingNext(false);
+    }
+  }, [
+    nextStageNumber,
+    startBattle,
+    startBattleForAgent,
+    storyCtx,
+    chapterStages,
+    navigate,
+    meta.isAIOpponent,
+  ]);
+
+  const handleCopyAgentMatch = useCallback(async () => {
+    if (!agentNextMatchId) return;
+
+    try {
+      await navigator.clipboard.writeText(agentNextMatchId);
+      setCopyMessage("Match ID copied.");
+    } catch {
+      setCopyMessage("Clipboard not available. Select and copy manually.");
+    } finally {
+      setTimeout(() => setCopyMessage(""), 2200);
+    }
+  }, [agentNextMatchId]);
+
+  const handleCancelAgentMatch = useCallback(async () => {
+    if (!agentNextMatchId) return;
+    try {
+      await cancelStoryMatch({ matchId: agentNextMatchId });
+      setAgentNextMatchId(null);
+      setCopyMessage("");
+    } catch (err: any) {
+      setError(err.message ?? "Failed to cancel match lobby.");
+    }
+  }, [agentNextMatchId, cancelStoryMatch]);
 
   const handleMatchEnd = useCallback(
     async (result: StoryMatchEnd) => {
@@ -216,6 +367,7 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
   );
 
   if (completion) {
+    const nextStageAvailable = won ? Boolean(nextStageNumber) : false;
     return (
       <div className="relative h-screen">
         <VictoryScreen
@@ -223,7 +375,35 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
           starsEarned={completion.starsEarned}
           rewards={completion.rewards}
           storyPath={storyCtx?.chapterId ? `/story/${storyCtx.chapterId}` : "/story"}
+          nextStageAvailable={nextStageAvailable && !agentNextMatchId}
+          onPlayDialogue={handleStartNextStage}
         />
+        {agentNextMatchId && (
+          <div className="mt-4 paper-panel p-4 text-xs text-[#666] mx-4 absolute left-2 right-2 top-4">
+            <p className="font-bold uppercase tracking-wider text-[#121212] mb-1">
+              Autonomous opponent lobby open
+            </p>
+            <p className="text-[11px]">Share this match ID with the ElizaOS agent:</p>
+            <p className="font-mono break-all text-[#111] mt-1 mb-2">{agentNextMatchId}</p>
+            <button
+              type="button"
+              onClick={handleCopyAgentMatch}
+              className="text-[10px] font-bold uppercase tracking-wider bg-[#121212] text-[#ffcc00] px-3 py-2 rounded-sm"
+            >
+              Copy Match ID
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelAgentMatch}
+              className="text-[10px] font-bold uppercase tracking-wider bg-[#ffcc00] text-[#121212] px-3 py-2 rounded-sm ml-2"
+            >
+              Cancel Lobby
+            </button>
+            {copyMessage && <p className="mt-1 text-[#38a169] font-bold">{copyMessage}</p>}
+            <p className="text-[10px] mt-2">Agent should call JOIN_LTCG_MATCH with this ID.</p>
+          </div>
+        )}
+        {error && <p className="mt-2 text-center text-xs text-[#666]">{error}</p>}
         <StoryEventLog log={eventLog} />
       </div>
     );
@@ -236,7 +416,19 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
         <p className="text-xs uppercase tracking-wider font-bold text-[#666]">
           Resolving story stage...
         </p>
+        {error && <p className="text-red-600 text-xs mt-2">{error}</p>}
         <StoryEventLog log={eventLog} />
+      </div>
+    );
+  }
+
+  if (isStartingNext) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-[#fdfdfb] gap-2">
+        <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs uppercase tracking-wider font-bold text-[#666]">
+          Loading next stage...
+        </p>
       </div>
     );
   }
@@ -253,7 +445,7 @@ function StoryEventLog({ log }: { log: string[] }) {
   if (log.length === 0) return null;
 
   return (
-    <div className="fixed right-2 left-2 md:left-4 top-2 md:top-3 max-w-xl md:max-w-2xl mx-auto pointer-events-none">
+    <div className="fixed right-2 left-2 md:left-4 top-2 md:top-3 max-w-xl md:max-w-2xl mx-auto">
       <div className="paper-panel border border-[#121212] p-3 max-h-32 overflow-y-auto bg-white/95 backdrop-blur">
         <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-[#121212]">
           Match Log
@@ -266,6 +458,30 @@ function StoryEventLog({ log }: { log: string[] }) {
       </div>
     </div>
   );
+}
+
+function normalizeDialogueLines(dialogue: unknown): DialogueLine[] {
+  if (!Array.isArray(dialogue)) return [];
+
+  const lines: DialogueLine[] = [];
+  for (const line of dialogue) {
+    if (!line || typeof line !== "object") continue;
+
+    const entry = line as Record<string, unknown>;
+    const speaker = typeof entry.speaker === "string" ? entry.speaker.trim() : "";
+    const text = typeof entry.text === "string" ? entry.text.trim() : "";
+    if (!speaker || !text) continue;
+
+    const avatar =
+      typeof entry.avatar === "string" && entry.avatar.trim()
+        ? entry.avatar
+        : typeof entry.imageUrl === "string" && entry.imageUrl.trim()
+          ? entry.imageUrl
+          : undefined;
+    lines.push({ speaker, text, avatar });
+  }
+
+  return lines;
 }
 
 function formatEventTime(createdAt: number) {

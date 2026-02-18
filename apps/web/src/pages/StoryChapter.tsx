@@ -43,7 +43,7 @@ export function StoryChapter() {
 function StoryChapterInner() {
   const { chapterId } = useParams<{ chapterId: string }>();
   const navigate = useNavigate();
-  const { pushEvents } = useStory();
+  const { chapters, isStageComplete, isChapterUnlocked } = useStory();
   const currentUser = useConvexQuery(
     apiAny.auth.currentUser,
     chapterId ? {} : "skip",
@@ -63,10 +63,16 @@ function StoryChapterInner() {
   ) as StarterDeck[] | undefined;
 
   const startBattle = useConvexMutation(apiAny.game.startStoryBattle);
+  const startBattleForAgent = useConvexMutation(apiAny.game.startStoryBattleForAgent);
   const selectStarterDeck = useConvexMutation(apiAny.game.selectStarterDeck);
   const setActiveDeck = useConvexMutation(apiAny.game.setActiveDeck);
+  const cancelStoryMatch = useConvexMutation(apiAny.game.cancelWaitingStoryMatch);
   const [starting, setStarting] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [agentMatch, setAgentMatch] = useState<{ matchId: string; stageNumber: number } | null>(
+    null,
+  );
+  const [copyMessage, setCopyMessage] = useState("");
 
   const ensureActiveDeck = async () => {
     const activeDeckId = normalizeDeckId(currentUser?.activeDeckId);
@@ -90,6 +96,17 @@ function StoryChapterInner() {
 
   const sorted = [...(stages ?? [])].sort((a, b) => a.stageNumber - b.stageNumber);
 
+  const sortedChapters = [...(chapters ?? [])].sort((a, b) => {
+    const actDiff = (a.actNumber ?? 0) - (b.actNumber ?? 0);
+    if (actDiff !== 0) return actDiff;
+    const chapterDiff = (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0);
+    if (chapterDiff !== 0) return chapterDiff;
+    return 0;
+  });
+
+  const currentChapter = sortedChapters.find((c) => c._id === chapterId);
+  const chapterUnlocked = chapterId && currentChapter ? isChapterUnlocked(chapterId) : false;
+
   const handleStartBattle = async (stage: Stage) => {
     if (!chapterId) return;
     setStarting(stage.stageNumber);
@@ -97,14 +114,6 @@ function StoryChapterInner() {
 
     try {
       await ensureActiveDeck();
-      // Play pre-match dialogue if available
-      if (stage.preMatchDialogue && stage.preMatchDialogue.length > 0) {
-        pushEvents([{ type: "dialogue", lines: stage.preMatchDialogue }]);
-      }
-
-      // Battle transition
-      pushEvents([{ type: "transition", variant: "battle-start" }]);
-
       const result = await startBattle({
         chapterId,
         stageNumber: stage.stageNumber,
@@ -121,6 +130,56 @@ function StoryChapterInner() {
       setError(err.message ?? "Failed to start battle.");
     } finally {
       setStarting(null);
+    }
+  };
+
+  const handleStartBattleForAgent = async (stage: Stage) => {
+    if (!chapterId) return;
+    setStarting(stage.stageNumber);
+    setError("");
+    setCopyMessage("");
+
+    try {
+      await ensureActiveDeck();
+      const result = await startBattleForAgent({
+        chapterId,
+        stageNumber: stage.stageNumber,
+      }) as { matchId?: string; stageNumber?: number };
+
+      const nextMatchId = normalizeMatchId(typeof result?.matchId === "string" ? result.matchId : null);
+      if (!nextMatchId) {
+        throw new Error("No match ID was returned from the match creator.");
+      }
+
+      setAgentMatch({
+        matchId: nextMatchId,
+        stageNumber: typeof result.stageNumber === "number" ? result.stageNumber : stage.stageNumber,
+      });
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setError(err.message ?? "Failed to create agent matchup.");
+    } finally {
+      setStarting(null);
+    }
+  };
+
+  const handleCopyAgentMatch = async () => {
+    if (!agentMatch?.matchId) return;
+    await navigator.clipboard.writeText(agentMatch.matchId);
+    setCopyMessage("Match ID copied.");
+    setTimeout(() => setCopyMessage(""), 2200);
+  };
+
+  const handleCancelAgentMatch = async () => {
+    if (!agentMatch?.matchId) return;
+    try {
+      await cancelStoryMatch({
+        matchId: agentMatch.matchId,
+      }) as { canceled: boolean };
+      setAgentMatch(null);
+      setCopyMessage("");
+    } catch (err: any) {
+      setError(err.message ?? "Failed to cancel match lobby.");
     }
   };
 
@@ -160,30 +219,79 @@ function StoryChapterInner() {
             </p>
           </div>
         ) : (
-          <motion.div
-            className="comic-page grid grid-cols-2 gap-[6px] border-[3px] border-[#121212] bg-[#121212] shadow-zine"
-            initial="hidden"
-            animate="visible"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}
-          >
-            {sorted.map((stage, i) => {
-              // First panel spans full width + taller, rest split bottom row
-              const isHero = i === 0;
-              return (
-                <div
-                  key={stage._id}
-                  className={isHero ? "col-span-2 h-[280px] md:h-[340px]" : "col-span-1 h-[200px] md:h-[260px]"}
-                >
-                  <StagePanel
-                    stage={stage}
-                    isStarting={starting === stage.stageNumber}
-                    onFight={() => handleStartBattle(stage)}
-                    chapterId={chapterId}
-                  />
-                </div>
-              );
-            })}
-          </motion.div>
+        <motion.div
+          className="comic-page grid grid-cols-2 gap-[6px] border-[3px] border-[#121212] bg-[#121212] shadow-zine"
+          initial="hidden"
+          animate="visible"
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}
+        >
+          {sorted.map((stage, i) => {
+            const previousStage =
+              sorted.find((candidate) => candidate.stageNumber === stage.stageNumber - 1) ??
+              null;
+            const isPreviousClear =
+              stage.stageNumber === 1
+                ? true
+                : previousStage
+                  ? isStageComplete(previousStage._id)
+                  : false;
+            const locked = !chapterUnlocked || !isPreviousClear;
+            const isHero = i === 0;
+
+            // First panel spans full width + taller, rest split bottom row
+            return (
+              <div
+                key={stage._id}
+                className={
+                  isHero
+                    ? "col-span-2 h-[280px] md:h-[340px]"
+                    : "col-span-1 h-[200px] md:h-[260px]"
+                }
+              >
+                <StagePanel
+                  stage={stage}
+                  isStarting={starting === stage.stageNumber}
+                  onFight={() => handleStartBattle(stage)}
+                  onHostAgentFight={() => handleStartBattleForAgent(stage)}
+                  chapterId={chapterId}
+                  locked={locked}
+                />
+              </div>
+            );
+          })}
+        </motion.div>
+        )}
+
+        {agentMatch && (
+          <div className="mt-4 paper-panel p-4 text-xs text-[#666]">
+            <p className="font-bold uppercase tracking-wider text-[#121212] mb-1">
+              Autonomous opponent lobby open
+            </p>
+            <p className="text-[11px]">
+              Share this match ID with the ElizaOS agent:
+            </p>
+            <p className="font-mono break-all text-[#111] mt-1 mb-2">
+              {agentMatch.matchId}
+            </p>
+            <button
+              type="button"
+              onClick={handleCopyAgentMatch}
+              className="text-[10px] font-bold uppercase tracking-wider bg-[#121212] text-[#ffcc00] px-3 py-2 rounded-sm"
+            >
+              Copy Match ID
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelAgentMatch}
+              className="text-[10px] font-bold uppercase tracking-wider bg-[#ffcc00] text-[#121212] px-3 py-2 rounded-sm ml-2"
+            >
+              Cancel Lobby
+            </button>
+            {copyMessage && <p className="mt-1 text-[#38a169] font-bold">{copyMessage}</p>}
+            <p className="text-[10px] mt-2">
+              Agent should call JOIN_LTCG_MATCH with this ID.
+            </p>
+          </div>
         )}
 
         {error && (

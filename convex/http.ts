@@ -344,6 +344,32 @@ corsRoute({
 });
 
 corsRoute({
+  path: "/api/agent/game/join",
+  method: "POST",
+  handler: async (ctx, request) => {
+    const agent = await authenticateAgent(ctx, request);
+    if (!agent) return errorResponse("Unauthorized", 401);
+
+    const body = await request.json();
+    const { matchId } = body;
+
+    if (!matchId || typeof matchId !== "string") {
+      return errorResponse("matchId is required.");
+    }
+
+    try {
+      const result = await ctx.runMutation(api.agentAuth.agentJoinMatch, {
+        agentUserId: agent.userId,
+        matchId,
+      });
+      return jsonResponse(result);
+    } catch (e: any) {
+      return errorResponse(e.message, 422);
+    }
+  },
+});
+
+corsRoute({
   path: "/api/agent/game/action",
   method: "POST",
   handler: async (ctx, request) => {
@@ -351,10 +377,18 @@ corsRoute({
     if (!agent) return errorResponse("Unauthorized", 401);
 
     const body = await request.json();
-    const { matchId, command, seat: requestedSeat } = body;
+    const {
+      matchId,
+      command,
+      seat: requestedSeat,
+      expectedVersion,
+    } = body;
 
     if (!matchId || !command) {
       return errorResponse("matchId and command are required.");
+    }
+    if (expectedVersion !== undefined && typeof expectedVersion !== "number") {
+      return errorResponse("expectedVersion must be a number.");
     }
 
     let resolvedSeat: MatchSeat;
@@ -391,6 +425,8 @@ corsRoute({
         matchId,
         command: JSON.stringify(normalizedCommand),
         seat: resolvedSeat,
+        expectedVersion:
+          typeof expectedVersion === "number" ? Number(expectedVersion) : undefined,
       });
       return jsonResponse(result);
     } catch (e: any) {
@@ -546,6 +582,7 @@ corsRoute({
     try {
       const result = await ctx.runMutation(api.game.completeStoryStage, {
         matchId,
+        actorUserId: agent.userId,
       });
       return jsonResponse(result);
     } catch (e: any) {

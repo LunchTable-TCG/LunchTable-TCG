@@ -145,6 +145,7 @@ export const submitAction = mutation({
     matchId: v.id("matches"),
     command: v.string(), // JSON-serialized Command
     seat: seatValidator,
+    expectedVersion: v.optional(v.number()),
     cardLookup: v.optional(v.string()), // JSON-serialized Record<string, CardDefinition>
   },
   returns: v.object({
@@ -178,6 +179,10 @@ export const submitAction = mutation({
       throw new Error(
         `No snapshot found for match ${args.matchId} — was startMatch called?`
       );
+    }
+
+    if (args.expectedVersion !== undefined && latestSnapshot.version !== args.expectedVersion) {
+      throw new Error("submitAction version mismatch; state updated by another action.");
     }
 
     // -----------------------------------------------------------------------

@@ -59,6 +59,7 @@ export const syncUser = mutation({
     return await ctx.db.insert("users", {
       privyId,
       username: `player_${Date.now()}`,
+      avatarPath: DEFAULT_SIGNUP_AVATAR_PATH,
       email,
       createdAt: Date.now(),
     });
@@ -82,6 +83,7 @@ export const currentUser = query({
 });
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
+const DEFAULT_SIGNUP_AVATAR_PATH = "avatars/signup/avatar-001.png";
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
 const VALID_SIGNUP_AVATAR_PATHS = new Set(
   Array.from({ length: 29 }, (_, index) => {

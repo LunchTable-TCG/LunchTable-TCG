@@ -89,6 +89,7 @@ export class LTCGMatch {
       command: string;
       seat: "host" | "away";
       cardLookup?: string;
+      expectedVersion?: number;
     }
   ) {
     return await ctx.runMutation(this.component.mutations.submitAction, {
@@ -96,6 +97,7 @@ export class LTCGMatch {
       command: args.command,
       seat: args.seat,
       cardLookup: args.cardLookup,
+      expectedVersion: args.expectedVersion,
     });
   }
 
@@ -135,6 +137,15 @@ export class LTCGMatch {
     return await ctx.runQuery(this.component.queries.getRecentEvents, {
       matchId: args.matchId as any,
       sinceVersion: args.sinceVersion,
+    });
+  }
+
+  async getLatestSnapshotVersion(
+    ctx: RunQueryCtx,
+    args: { matchId: string }
+  ) {
+    return await ctx.runQuery(this.component.queries.getLatestSnapshotVersion, {
+      matchId: args.matchId as any,
     });
   }
 

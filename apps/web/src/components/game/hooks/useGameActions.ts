@@ -27,7 +27,11 @@ function sfxForCommand(command: Record<string, unknown>): string | null {
   }
 }
 
-export function useGameActions(matchId: string | undefined, seat: Seat) {
+export function useGameActions(
+  matchId: string | undefined,
+  seat: Seat,
+  expectedVersion?: number | null,
+) {
   const submitAction = useConvexMutation(apiAny.game.submitAction);
   const { playSfx } = useAudio();
   const [submitting, setSubmitting] = useState(false);
@@ -43,18 +47,25 @@ export function useGameActions(matchId: string | undefined, seat: Seat) {
           matchId,
           command: JSON.stringify(command),
           seat,
+          expectedVersion: typeof expectedVersion === "number" ? expectedVersion : undefined,
         });
         const sfx = sfxForCommand(command);
         if (sfx) playSfx(sfx);
       } catch (err: any) {
         Sentry.captureException(err);
-        setError(err.message ?? "Action failed.");
+        const message = err?.message ?? "Action failed.";
+        const normalized = String(message).toLowerCase();
+        if (normalized.includes("version mismatch") || normalized.includes("state updated")) {
+          setError("Action was rejected due to stale state. Refreshing the view should sync.");
+        } else {
+          setError(message);
+        }
         playSfx("error");
       } finally {
         setSubmitting(false);
       }
     },
-    [matchId, seat, submitAction, submitting, playSfx],
+    [matchId, seat, expectedVersion, submitAction, submitting, playSfx],
   );
 
   return {

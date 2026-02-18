@@ -105,7 +105,7 @@ export function VictoryScreen({
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1.5 }}
               >
-                First Clear Bonus: +{rewards.firstClearBonus} gold
+                First Clear Bonus: +{rewards.firstClearBonus}
               </motion.p>
             )}
           </motion.div>

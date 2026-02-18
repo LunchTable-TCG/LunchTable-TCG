@@ -11,6 +11,7 @@ import type {
   GameCommand,
   MatchActive,
   MatchStatus,
+  MatchJoinResult,
   PlayerView,
   StageCompletionResult,
   StageData,
@@ -124,21 +125,36 @@ export class LTCGClient {
     return this.post("/api/agent/game/start-duel", {});
   }
 
+  /** POST /api/agent/game/join — join a waiting human match as the away player */
+  async joinMatch(matchId: string): Promise<MatchJoinResult> {
+    const result = await this.post<MatchJoinResult>("/api/agent/game/join", {
+      matchId,
+    });
+    this.matchId = result.matchId;
+    this.seat = "away";
+    return result;
+  }
+
   /** POST /api/agent/game/action — submit a game command */
   async submitAction(
     matchId: string,
     command: GameCommand,
     seat?: MatchActive["seat"],
+    expectedVersion?: number,
   ): Promise<unknown> {
     const resolvedSeat = seat ?? this.seat;
     const payload: {
       matchId: string;
       command: GameCommand;
       seat?: MatchActive["seat"];
+      expectedVersion?: number;
     } = { matchId, command };
 
     if (resolvedSeat) {
       payload.seat = resolvedSeat;
+    }
+    if (typeof expectedVersion === "number") {
+      payload.expectedVersion = expectedVersion;
     }
 
     return this.post("/api/agent/game/action", payload);

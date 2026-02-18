@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
 import { useConvexAuth } from "convex/react";
 import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
 
@@ -24,6 +24,12 @@ export type Chapter = {
   imageUrl?: string;
   archetype?: string;
   status?: string;
+  unlockRequirements?: {
+    previousChapter?: boolean;
+    minimumLevel?: number;
+    requiredChapterId?: string;
+  };
+  requiredChapterId?: string;
 };
 
 export type Stage = {
@@ -42,7 +48,14 @@ export type Stage = {
   firstClearBonus?: number | { gold?: number; xp?: number; gems?: number };
 };
 
-type StoryProgress = { chapterId: string; completed: boolean };
+type StoryProgress = {
+  chapterId?: string;
+  actNumber?: number;
+  chapterNumber?: number;
+  status?: string;
+  timesCompleted?: number;
+  starsEarned?: number;
+};
 type StageProgressEntry = {
   stageId: string;
   chapterId: string;
@@ -62,6 +75,7 @@ type StoryContextValue = {
 
   // Progression helpers
   isChapterComplete: (chapterId: string) => boolean;
+  isChapterUnlocked: (chapterId: string) => boolean;
   isStageComplete: (stageId: string) => boolean;
   getStageStars: (stageId: string) => number;
   totalStars: number;
@@ -123,9 +137,69 @@ export function StoryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Progress helpers
-  const completedChapters = new Set(
-    (progress ?? []).filter((p) => p.completed).map((p) => p.chapterId),
-  );
+  const chapterById = useMemo(() => {
+    const map = new Map<string, string>();
+    (chapters ?? []).forEach((chapter) => {
+      if (chapter.actNumber !== undefined && chapter.chapterNumber !== undefined) {
+        map.set(`${chapter.actNumber}-${chapter.chapterNumber}`, chapter._id);
+      }
+    });
+    return map;
+  }, [chapters]);
+
+  const chapterMetaById = useMemo(() => {
+    const map = new Map<string, { actNumber?: number; chapterNumber?: number }>();
+    for (const chapter of chapters ?? []) {
+      map.set(chapter._id, {
+        actNumber: chapter.actNumber,
+        chapterNumber: chapter.chapterNumber,
+      });
+    }
+    return map;
+  }, [chapters]);
+
+  const sortedChapters = useMemo(() => {
+    return [...(chapters ?? [])].sort((a, b) => {
+      const actDelta = (a.actNumber ?? 0) - (b.actNumber ?? 0);
+      if (actDelta !== 0) return actDelta;
+      return (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0);
+    });
+  }, [chapters]);
+
+  const completedChapters = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of progress ?? []) {
+      if (p.status !== "completed" && p.status !== "starred") continue;
+      if (p.chapterId) {
+        set.add(p.chapterId);
+        continue;
+      }
+
+      const chapterId = chapterById.get(`${p.actNumber ?? ""}-${p.chapterNumber ?? ""}`);
+      if (chapterId) {
+        set.add(chapterId);
+      }
+    }
+    return set;
+  }, [chapterById, progress]);
+
+  const storyLevel = useMemo(() => {
+    let maxCompletedAct = 0;
+    for (const entry of progress ?? []) {
+      if (!entry) continue;
+      if (entry.status !== "completed" && entry.status !== "starred") continue;
+
+      const chapterMeta = entry.chapterId ? chapterMetaById.get(entry.chapterId) : null;
+      const actNumber =
+        chapterMeta?.actNumber ??
+        (entry.actNumber !== undefined ? Number(entry.actNumber) : NaN);
+      if (Number.isFinite(actNumber) && actNumber > maxCompletedAct) {
+        maxCompletedAct = actNumber;
+      }
+    }
+    return Math.max(1, maxCompletedAct + 1);
+  }, [chapterMetaById, progress]);
+
   const completedStages = new Set(
     (stageProgress ?? [])
       .filter((p) => p.status === "completed" || p.status === "starred")
@@ -135,6 +209,34 @@ export function StoryProvider({ children }: { children: ReactNode }) {
   const isChapterComplete = useCallback(
     (chapterId: string) => completedChapters.has(chapterId),
     [completedChapters],
+  );
+  const isChapterUnlocked = useCallback(
+    (chapterId: string) => {
+      const chapter = sortedChapters.find((item) => item._id === chapterId);
+      if (!chapter) return false;
+      const requirements = chapter.unlockRequirements ?? {};
+
+      if (typeof requirements.minimumLevel === "number") {
+        if (storyLevel < requirements.minimumLevel) return false;
+      }
+
+      const hasPreviousChapterRequirement = Boolean(requirements.previousChapter);
+      const hasExplicitRequiredChapter =
+        typeof requirements.requiredChapterId === "string";
+
+      if (!hasPreviousChapterRequirement && !hasExplicitRequiredChapter) return true;
+
+      const chapterIndex = sortedChapters.findIndex((item) => item._id === chapterId);
+      const requiredChapterId = hasExplicitRequiredChapter
+        ? requirements.requiredChapterId?.trim?.()
+        : hasPreviousChapterRequirement && chapterIndex > 0
+          ? sortedChapters[chapterIndex - 1]?._id
+          : "";
+
+      if (!requiredChapterId) return false;
+      return isChapterComplete(requiredChapterId);
+    },
+    [isChapterComplete, sortedChapters, storyLevel],
   );
   const isStageComplete = useCallback(
     (stageId: string) => completedStages.has(stageId),
@@ -153,6 +255,7 @@ export function StoryProvider({ children }: { children: ReactNode }) {
     stageProgress,
     isLoading: chapters === undefined || (isAuthenticated && !currentUser?._id),
     isChapterComplete,
+    isChapterUnlocked,
     isStageComplete,
     getStageStars,
     totalStars,

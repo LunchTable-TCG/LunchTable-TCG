@@ -1,4 +1,4 @@
-import type { Phase } from "@lunchtable-tcg/engine";
+import type { Phase } from "./types";
 
 interface PhaseBarProps {
   currentPhase: Phase;

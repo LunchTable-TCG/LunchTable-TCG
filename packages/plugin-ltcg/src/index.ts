@@ -14,6 +14,7 @@
  *   START_DUEL         — Compatibility alias for START_LTCG_DUEL
  *   START_LTCG_BATTLE  — Start a story mode battle
  *   START_BATTLE       — Compatibility alias for START_LTCG_BATTLE
+ *   JOIN_LTCG_MATCH    — Join an open human-hosted match as the away seat
  *   PLAY_LTCG_TURN     — Auto-play one turn (summon, attack, end)
  *   PLAY_LTCG_STORY    — Play through a full story stage (start → loop → complete)
  *   CHECK_LTCG_STATUS  — Check current match state
@@ -40,9 +41,11 @@ import { playTurnAction } from "./actions/playTurn.js";
 import { getStatusAction } from "./actions/getStatus.js";
 import { surrenderAction } from "./actions/surrender.js";
 import { playStoryAction } from "./actions/playStory.js";
+import { joinMatchAction } from "./actions/joinMatch.js";
 import { getSoundtrackAction } from "./actions/getSoundtrack.js";
 import { statusRoute, statusRouteLegacy } from "./routes/status.js";
 import { ltcgEvents } from "./events.js";
+import { getEnvValue } from "./env.js";
 import type { Plugin, IAgentRuntime } from "./types.js";
 
 const plugin: Plugin = {
@@ -51,14 +54,15 @@ const plugin: Plugin = {
     "Play LunchTable Trading Card Game battles via the agent HTTP API",
 
   config: {
-    LTCG_API_URL: process.env.LTCG_API_URL,
-    LTCG_API_KEY: process.env.LTCG_API_KEY,
-    LTCG_SOUNDTRACK_API_URL: process.env.LTCG_SOUNDTRACK_API_URL,
+    LTCG_API_URL: getEnvValue("LTCG_API_URL"),
+    LTCG_API_KEY: getEnvValue("LTCG_API_KEY"),
+    LTCG_SOUNDTRACK_API_URL: getEnvValue("LTCG_SOUNDTRACK_API_URL"),
   },
 
   async init(config: Record<string, string>, _runtime: IAgentRuntime) {
-    const apiUrl = config.LTCG_API_URL || process.env.LTCG_API_URL || "";
-    const apiKey = config.LTCG_API_KEY || process.env.LTCG_API_KEY || "";
+    const apiUrl =
+      config.LTCG_API_URL || getEnvValue("LTCG_API_URL") || "";
+    const apiKey = config.LTCG_API_KEY || getEnvValue("LTCG_API_KEY") || "";
 
     if (!apiUrl) {
       throw new Error(
@@ -103,6 +107,7 @@ const plugin: Plugin = {
     playTurnAction,
     playStoryAction,
     getStatusAction,
+    joinMatchAction,
     surrenderAction,
     getSoundtrackAction,
   ],
@@ -124,6 +129,7 @@ export { playTurnAction } from "./actions/playTurn.js";
 export { getStatusAction } from "./actions/getStatus.js";
 export { surrenderAction } from "./actions/surrender.js";
 export { playStoryAction } from "./actions/playStory.js";
+export { joinMatchAction } from "./actions/joinMatch.js";
 export { getSoundtrackAction } from "./actions/getSoundtrack.js";
 export { statusRoute, statusRouteLegacy } from "./routes/status.js";
 export { ltcgEvents } from "./events.js";
@@ -135,6 +141,7 @@ export type {
   GameCommand,
   MatchStatus,
   PlayerView,
+  MatchJoinResult,
   Route,
   StageCompletionResult,
   StageData,

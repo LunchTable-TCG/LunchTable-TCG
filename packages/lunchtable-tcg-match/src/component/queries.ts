@@ -3,6 +3,59 @@ import { query } from "./_generated/server";
 import { mask } from "@lunchtable-tcg/engine";
 import type { GameState, Seat } from "@lunchtable-tcg/engine";
 
+const vSeat = v.union(v.literal("host"), v.literal("away"));
+const vMatchStatus = v.union(
+  v.literal("waiting"),
+  v.literal("active"),
+  v.literal("ended"),
+);
+const vMatchMode = v.union(v.literal("pvp"), v.literal("story"));
+const vMatchWinner = v.union(v.literal("host"), v.literal("away"));
+
+const vMatch = v.object({
+  _id: v.id("matches"),
+  _creationTime: v.number(),
+  hostId: v.string(),
+  awayId: v.union(v.string(), v.null()),
+  mode: vMatchMode,
+  status: vMatchStatus,
+  winner: v.optional(vMatchWinner),
+  endReason: v.optional(v.string()),
+  hostDeck: v.array(v.string()),
+  awayDeck: v.union(v.array(v.string()), v.null()),
+  isAIOpponent: v.boolean(),
+  createdAt: v.number(),
+  startedAt: v.optional(v.number()),
+  endedAt: v.optional(v.number()),
+});
+
+const vMatchEventBatch = v.object({
+  _id: v.id("matchEvents"),
+  _creationTime: v.number(),
+  version: v.number(),
+  events: v.string(),
+  command: v.string(),
+  seat: vSeat,
+  createdAt: v.number(),
+});
+
+const vOpenPrompt = v.object({
+  _id: v.id("matchPrompts"),
+  _creationTime: v.number(),
+  matchId: v.id("matches"),
+  seat: vSeat,
+  promptType: v.union(
+    v.literal("chain_response"),
+    v.literal("optional_trigger"),
+    v.literal("replay_decision"),
+    v.literal("discard"),
+  ),
+  data: v.optional(v.string()),
+  resolved: v.boolean(),
+  createdAt: v.number(),
+  resolvedAt: v.optional(v.number()),
+});
+
 // ============================================================================
 // QUERIES
 // ============================================================================
@@ -13,7 +66,7 @@ import type { GameState, Seat } from "@lunchtable-tcg/engine";
  */
 export const getMatchMeta = query({
   args: { matchId: v.id("matches") },
-  returns: v.any(),
+  returns: v.union(vMatch, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db.get(args.matchId);
   },
@@ -57,7 +110,7 @@ export const getRecentEvents = query({
     matchId: v.id("matches"),
     sinceVersion: v.number(),
   },
-  returns: v.any(),
+  returns: v.array(vMatchEventBatch),
   handler: async (ctx, args) => {
     const allEvents = await ctx.db
       .query("matchEvents")
@@ -68,6 +121,8 @@ export const getRecentEvents = query({
     return allEvents
       .filter((e) => e.version > args.sinceVersion)
       .map((e) => ({
+        _id: e._id,
+        _creationTime: e._creationTime,
         version: e.version,
         events: e.events,
         command: e.command,
@@ -77,13 +132,29 @@ export const getRecentEvents = query({
   },
 });
 
+export const getLatestSnapshotVersion = query({
+  args: {
+    matchId: v.id("matches"),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const snapshot = await ctx.db
+      .query("matchSnapshots")
+      .withIndex("by_match_version", (q) => q.eq("matchId", args.matchId))
+      .order("desc")
+      .first();
+
+    return snapshot?.version ?? -1;
+  },
+});
+
 /**
  * Get the most recent active (or waiting) match where the given player is host or away.
  * Returns the match document or null if none found.
  */
 export const getActiveMatchByHost = query({
   args: { hostId: v.string() },
-  returns: v.any(),
+  returns: v.union(vMatch, v.null()),
   handler: async (ctx, args) => {
     // Check active matches first
     const activeAsHost = await ctx.db
@@ -125,7 +196,7 @@ export const getActiveMatchByHost = query({
  */
 export const getOpenLobbyByHost = query({
   args: { hostId: v.string() },
-  returns: v.any(),
+  returns: v.union(vMatch, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
       .query("matches")
@@ -144,9 +215,9 @@ export const getOpenLobbyByHost = query({
 export const getOpenPrompt = query({
   args: {
     matchId: v.id("matches"),
-    seat: v.union(v.literal("host"), v.literal("away")),
+    seat: vSeat,
   },
-  returns: v.any(),
+  returns: v.union(vOpenPrompt, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
       .query("matchPrompts")

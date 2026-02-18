@@ -38,12 +38,16 @@ export function StagePanel({
   stage,
   isStarting,
   onFight,
+  onHostAgentFight,
   chapterId,
+  locked = false,
 }: {
   stage: Stage;
   isStarting: boolean;
   onFight: () => void;
+  onHostAgentFight?: () => void;
   chapterId?: string;
+  locked?: boolean;
 }) {
   const { isStageComplete, getStageStars, chapters } = useStory();
   const completed = isStageComplete(stage._id);
@@ -56,19 +60,34 @@ export function StagePanel({
     ? `${chapter.actNumber}-${chapter.chapterNumber}-${stage.stageNumber}`
     : null;
   const bannerImage = bannerKey ? STAGE_BANNERS[bannerKey] : null;
+  const canFight = !isStarting && !locked;
+
+  const handlePrimaryAction = () => {
+    if (!canFight) return;
+    onFight();
+  };
+
+  const handleHostAction = () => {
+    if (!canFight || !onHostAgentFight) return;
+    onHostAgentFight();
+  };
 
   return (
-    <motion.button
-      type="button"
-      onClick={onFight}
-      disabled={isStarting}
+    <motion.article
+      onClick={handlePrimaryAction}
       className={`comic-panel relative overflow-hidden text-left group w-full h-full ${
         completed ? "opacity-75" : ""
-      } ${isStarting ? "cursor-wait" : "cursor-pointer"}`}
+      } ${isStarting ? "cursor-wait" : locked ? "cursor-not-allowed" : "cursor-pointer"}`}
       variants={panelVariant}
-      whileHover={{ scale: 1.02, zIndex: 10 }}
+      whileHover={canFight ? { scale: 1.02, zIndex: 10 } : undefined}
       whileTap={{ scale: 0.97 }}
     >
+      {locked && (
+        <div className="absolute inset-0 z-20 bg-[#121212]/55 border-2 border-[#121212]/60 flex items-center justify-center">
+          <span className="comic-stamp border-white/70 text-white/90">LOCKED</span>
+        </div>
+      )}
+
       {/* Panel image */}
       {bannerImage && (
         <img
@@ -77,7 +96,9 @@ export function StagePanel({
           className={`absolute inset-0 w-full h-full object-cover transition-all ${
             completed
               ? "opacity-40 grayscale"
-              : "opacity-60 group-hover:opacity-75 grayscale-[0.3]"
+              : locked
+                ? "opacity-30"
+                : "opacity-60 group-hover:opacity-75 grayscale-[0.3]"
           }`}
           draggable={false}
         />
@@ -169,7 +190,20 @@ export function StagePanel({
             {isStarting ? "Loading..." : "Click to fight"}
           </span>
         )}
+
+        {!completed && onHostAgentFight && canFight && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleHostAction();
+            }}
+            className="mt-2 text-[10px] text-[#121212] bg-[#ffcc00] px-2 py-1 rounded-sm font-bold uppercase tracking-wider border border-[#121212] hover:bg-[#ffd95c]"
+          >
+            Host for autonomous agent
+          </button>
+        )}
       </div>
-    </motion.button>
+    </motion.article>
   );
 }

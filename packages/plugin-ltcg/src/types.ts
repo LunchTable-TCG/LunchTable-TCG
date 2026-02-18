@@ -173,6 +173,12 @@ export interface StarterDeck {
   description?: string;
 }
 
+export interface DialogueLine {
+  speaker: string;
+  text: string;
+  avatar?: string;
+}
+
 /** Card identifier in the player's hand (from PlayerView.hand). */
 export type CardInHand = string;
 
@@ -227,6 +233,8 @@ export interface PlayerView {
   opponentDeckCount?: number;
   opponentBreakdownsCaused?: number;
   currentChain?: unknown[];
+  currentPriorityPlayer?: "host" | "away" | null;
+  currentChainPasser?: "host" | "away" | null;
   mySeat?: "host" | "away";
   opponentHandCount?: number;
   opponentBoard: BoardCard[];
@@ -273,6 +281,13 @@ export interface MatchActive {
   seat?: "host" | "away";
 }
 
+export interface MatchJoinResult {
+  matchId: string;
+  hostId: string;
+  mode: "pvp" | "story";
+  seat: "away";
+}
+
 // ── Story Mode Types ─────────────────────────────────────────────
 
 /** Stage progress for a single stage */
@@ -306,9 +321,9 @@ export interface StageData {
   rewardXp?: number;
   firstClearBonus?: number;
   narrative: {
-    preMatchDialogue: string[];
-    postMatchWinDialogue: string[];
-    postMatchLoseDialogue: string[];
+    preMatchDialogue: DialogueLine[];
+    postMatchWinDialogue: DialogueLine[];
+    postMatchLoseDialogue: DialogueLine[];
   };
 }
 
@@ -343,5 +358,13 @@ export type GameCommand =
       newPosition: string;
     }
   | { type: "FLIP_SUMMON"; cardId: string }
-  | { type: "CHAIN_RESPONSE"; pass: boolean; cardId?: string }
+  | {
+      type: "CHAIN_RESPONSE";
+      pass: boolean;
+      cardId?: string;
+      sourceCardId?: string;
+      effectIndex?: number;
+      chainLink?: number;
+      targets?: string[];
+    }
   | { type: "SURRENDER" };

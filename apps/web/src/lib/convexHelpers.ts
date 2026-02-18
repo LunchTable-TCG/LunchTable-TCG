@@ -1,35 +1,50 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — Convex generated types resolve at runtime via Vite
+import {
+  type OptionalRestArgsOrSkip,
+  useAction,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { useMutation, useQuery, useAction } from "convex/react";
+import type { DefaultFunctionArgs, FunctionReference } from "convex/server";
 
-/**
- * Type-cast API to avoid TS2589 errors.
- * Use this instead of `api as any` in components.
- */
+export { api };
+
+export const convex = {
+  api,
+} as const;
+
+// Backward-compatible alias while callsites migrate to typed helpers.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const apiAny = api as any;
 
 /**
- * Wrapper for useMutation to avoid type instantiation errors.
+ * Strictly typed helper for Convex public mutations.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useConvexMutation(path: any) {
+export function useConvexMutation<
+  TMutation extends FunctionReference<"mutation", "public", DefaultFunctionArgs>,
+>(path: TMutation) {
   return useMutation(path);
 }
 
 /**
- * Wrapper for useQuery to avoid type instantiation errors.
+ * Strictly typed helper for Convex public queries.
+ *
+ * Use "skip" when the query should be paused until prerequisites are ready.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useConvexQuery(path: any, args?: any) {
-  return useQuery(path, args);
+export function useConvexQuery<
+  TQuery extends FunctionReference<"query", "public", DefaultFunctionArgs>,
+>(
+  path: TQuery,
+  ...args: OptionalRestArgsOrSkip<TQuery>
+) {
+  return useQuery(path, ...args);
 }
 
 /**
- * Wrapper for useAction to avoid type instantiation errors.
+ * Strictly typed helper for Convex public actions.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useConvexAction(path: any) {
+export function useConvexAction<
+  TAction extends FunctionReference<"action", "public", DefaultFunctionArgs>,
+>(path: TAction) {
   return useAction(path);
 }

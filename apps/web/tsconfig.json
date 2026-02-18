@@ -16,7 +16,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@convex-generated-api": ["./src/types/convex-generated-api"]
     }
   },
   "include": ["src"]

@@ -1,4 +1,5 @@
 import type { GameState, Seat, Command, EngineEvent, BoardCard } from "../types/index.js";
+import { expectDefined } from "../internal/invariant.js";
 
 export function decideSummon(
   state: GameState,
@@ -39,25 +40,27 @@ export function decideSummon(
 
   // Check tribute requirements
   const level = card.level ?? 0;
-  if (level >= 7) {
-    // Requires 1 tribute
-    if (tributeCardIds.length !== 1) {
-      return events;
-    }
+      if (level >= 7) {
+        // Requires 1 tribute
+        if (tributeCardIds.length !== 1) {
+          return events;
+        }
+        const tributeCardId = tributeCardIds[0];
+        if (!tributeCardId) return events;
 
-    // Validate tribute is a valid monster on player's board
-    const tributeCard = board.find((c) => c.cardId === tributeCardIds[0]);
-    if (!tributeCard || tributeCard.faceDown) {
-      return events;
-    }
+        // Validate tribute is a valid monster on player's board
+        const tributeCard = board.find((c) => c.cardId === tributeCardId);
+        if (!tributeCard || tributeCard.faceDown) {
+          return events;
+        }
 
-    // Send tribute to graveyard
-    events.push({
-      type: "CARD_SENT_TO_GRAVEYARD",
-      cardId: tributeCardIds[0],
-      from: "board",
-    });
-  } else {
+        // Send tribute to graveyard
+        events.push({
+          type: "CARD_SENT_TO_GRAVEYARD",
+          cardId: tributeCardId,
+          from: "board",
+        });
+      } else {
     // Level 1-6: no tribute needed
     if (tributeCardIds.length > 0) {
       return events;
@@ -262,8 +265,13 @@ export function evolveSummon(state: GameState, event: EngineEvent): GameState {
       const board = isHost ? [...newState.hostBoard] : [...newState.awayBoard];
       const cardIndex = board.findIndex((c) => c.cardId === cardId);
       if (cardIndex > -1) {
+        const card = expectDefined(
+          board[cardIndex],
+          `rules.summoning.evolveSummon missing card at index ${cardIndex}`
+        );
+
         board[cardIndex] = {
-          ...board[cardIndex],
+          ...card,
           faceDown: false,
           position,
           changedPositionThisTurn: true,

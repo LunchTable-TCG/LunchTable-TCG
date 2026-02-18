@@ -1,5 +1,6 @@
 import type { GameState, Seat, Command, EngineEvent, SpellTrapCard } from "../types/index.js";
 import { executeEffect } from "../effects/interpreter.js";
+import { expectDefined } from "../internal/invariant.js";
 
 function getPlayerZones(state: GameState, seat: Seat) {
   const isHost = seat === "host";
@@ -57,7 +58,7 @@ export function decideActivateSpell(
   command: Extract<Command, { type: "ACTIVATE_SPELL" }>
 ): EngineEvent[] {
   const events: EngineEvent[] = [];
-  const { cardId, targets = [] } = command;
+  const { cardId, effectIndex, targets = [] } = command;
 
   // Check phase (for now, only main phases)
   if (state.currentPhase !== "main" && state.currentPhase !== "main2") {
@@ -107,7 +108,10 @@ export function decideActivateSpell(
 
   // Execute spell effect (if card has effects, execute the first one)
   if (card.effects && card.effects.length > 0) {
-    events.push(...executeEffect(state, card, 0, seat, cardId, targets));
+    const selectedEffectIndex = effectIndex ?? 0;
+    if (selectedEffectIndex >= 0 && selectedEffectIndex < card.effects.length) {
+      events.push(...executeEffect(state, card, selectedEffectIndex, seat, cardId, targets));
+    }
   }
 
   return events;
@@ -119,7 +123,7 @@ export function decideActivateTrap(
   command: Extract<Command, { type: "ACTIVATE_TRAP" }>
 ): EngineEvent[] {
   const events: EngineEvent[] = [];
-  const { cardId, targets = [] } = command;
+  const { cardId, effectIndex, targets = [] } = command;
 
   const zones = getPlayerZones(state, seat);
 
@@ -145,7 +149,10 @@ export function decideActivateTrap(
 
   // Execute trap effect (if card has effects, execute the first one)
   if (card.effects && card.effects.length > 0) {
-    events.push(...executeEffect(state, card, 0, seat, cardId, targets));
+    const selectedEffectIndex = effectIndex ?? 0;
+    if (selectedEffectIndex >= 0 && selectedEffectIndex < card.effects.length) {
+      events.push(...executeEffect(state, card, selectedEffectIndex, seat, cardId, targets));
+    }
   }
 
   return events;
@@ -203,7 +210,10 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
 
       // Get card definition - use definitionId if it's a set card, otherwise use cardId
       const definitionId = setCard ? setCard.definitionId : cardId;
-      const card = newState.cardLookup[definitionId];
+      const card = expectDefined(
+        newState.cardLookup[definitionId],
+        `rules.spellsTraps.evolveSpellTrap missing definition ${definitionId} for SPELL_ACTIVATED ${cardId}`
+      );
 
       // If it's a field spell
       if (card.spellType === "field") {
@@ -251,8 +261,13 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
         }
         // If face-down, flip it face-up
         else if (setCardIndex > -1) {
+          const setCardInZone = expectDefined(
+            spellTrapZone[setCardIndex],
+            `rules.spellsTraps.evolveSpellTrap missing set card at index ${setCardIndex}`
+          );
+
           spellTrapZone[setCardIndex] = {
-            ...spellTrapZone[setCardIndex],
+            ...setCardInZone,
             faceDown: false,
             activated: true,
           };
@@ -294,16 +309,24 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
       const graveyard = isHost ? [...newState.hostGraveyard] : [...newState.awayGraveyard];
 
       const setCardIndex = spellTrapZone.findIndex((c) => c.cardId === cardId);
-      const setCard = setCardIndex > -1 ? spellTrapZone[setCardIndex] : null;
+      if (setCardIndex > -1) {
+        const setCard = expectDefined(
+          spellTrapZone[setCardIndex],
+          `rules.spellsTraps.evolveSpellTrap missing trap card at index ${setCardIndex}`
+        );
+        const card = expectDefined(
+          newState.cardLookup[setCard.definitionId],
+          `rules.spellsTraps.evolveSpellTrap missing definition ${setCard.definitionId} for TRAP_ACTIVATED ${cardId}`
+        );
+        const setCardInZone = expectDefined(
+          spellTrapZone[setCardIndex],
+          `rules.spellsTraps.evolveSpellTrap missing trap zone entry at index ${setCardIndex}`
+        );
 
-      // Get card definition
-      const card = setCard ? newState.cardLookup[setCard.definitionId] : null;
-
-      if (setCardIndex > -1 && card) {
         // Continuous trap: flip face-up and stay on field
         if (card.trapType === "continuous") {
           spellTrapZone[setCardIndex] = {
-            ...spellTrapZone[setCardIndex],
+            ...setCardInZone,
             faceDown: false,
             activated: true,
           };
@@ -340,7 +363,7 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
         }
       }
       // Handle spell/trap zone cards
-      else if (from === "spellTrapZone") {
+      else if (from === "spellTrapZone" || from === "spell_trap_zone") {
         const hostIndex = newState.hostSpellTrapZone.findIndex((c) => c.cardId === cardId);
         if (hostIndex > -1) {
           newState.hostSpellTrapZone = [...newState.hostSpellTrapZone];
