@@ -29,5 +29,8 @@ jobs:
           bunx tsc --noEmit -p packages/lunchtable-tcg-story/tsconfig.json
           bunx tsc --noEmit -p packages/plugin-ltcg/tsconfig.json
 
+      - name: Verify package exports
+        run: bun run test:package-exports
+
       - name: Run tests
         run: bun run test:once
