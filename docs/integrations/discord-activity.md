@@ -8,9 +8,13 @@ This repo now supports running LTCG as a Discord Activity with shared cross-play
 - Discord Embedded App SDK initialization (`@discord/embedded-app-sdk`).
 - Discord OAuth scope bootstrap for rich-presence commands:
   - `authorize` -> `/api/discord-token` -> `authenticate`.
+- Discord interactions webhook endpoint with signature validation:
+  - `POST /api/interactions` (`PING` + command payload handling).
 - Discord-native invite flow (`shareLink`) from PvP lobby screens.
 - Discord rich presence updates (`setActivity`) with join secrets per match.
 - Auto-routing for invite launches via `custom_id` / `ACTIVITY_JOIN` secret.
+- Mobile deep-link routing:
+  - `/_discord/join?secret=<ltcg:match:...>` -> `/duel?join=<matchId>`.
 - Discord-first Privy login prompt when opened inside Activity.
 - Auto-linking Discord OAuth account in Privy for authenticated users in Activity.
 - Human PvP lobby + join flow in Convex (`createPvPLobby`, `joinPvPMatch`).
@@ -36,6 +40,7 @@ Server env (Vercel/API functions):
 DISCORD_CLIENT_SECRET=your_discord_oauth_client_secret
 # Optional fallback (client id also read from VITE_DISCORD_CLIENT_ID)
 DISCORD_CLIENT_ID=your_discord_application_client_id
+DISCORD_PUBLIC_KEY=your_discord_application_public_key
 ```
 
 Keep existing Privy env vars configured for app session auth.
@@ -54,6 +59,11 @@ Keep existing Privy env vars configured for app session auth.
    - `/.proxy/convex` -> `<your convex cloud host>`
    - `/.proxy/convex-site` -> `<your convex site host>`
    - Any extra hosts can be added via `VITE_DISCORD_URL_MAPPINGS` JSON.
+7. Configure **Interactions Endpoint URL**:
+   - `https://<your-domain>/api/interactions`
+8. Configure **Deep Link URL**:
+   - `https://<your-domain>/_discord/join`
+   - The app accepts `secret` (and existing `custom_id`/`join`) and routes to `/duel?join=<id>`.
 
 Reference docs:
 - [Discord Social SDK overview](https://docs.discord.com/developers/discord-social-sdk/overview)
@@ -67,6 +77,12 @@ Reference docs:
 - Existing milaidy hosts
 
 Do not re-add `X-Frame-Options: DENY` or Discord Activity embedding will fail.
+
+## Production checks
+
+- `curl -I https://<your-domain>` should show CSP `frame-ancestors` allowing Discord domains and should not include `X-Frame-Options: DENY`.
+- `POST https://<your-domain>/api/discord-token` with `{}` should return `400 {"error":"code is required"}`.
+- `POST https://<your-domain>/api/interactions` with invalid signatures should return `401`.
 
 ## Failure behavior
 

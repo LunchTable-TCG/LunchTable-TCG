@@ -9,8 +9,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
 import { AudioContextGate, AudioControlsDock, useAudio } from "@/components/audio/AudioProvider";
 import { getAudioContextFromPath } from "@/lib/audio/routeContext";
-import { isDiscordActivityFrame } from "@/lib/clientPlatform";
-import { normalizeMatchId } from "@/lib/matchIds";
+import { resolveDiscordEntryRedirect } from "@/lib/discordEntry";
 import { Home } from "@/pages/Home";
 
 const Onboarding = lazy(() => import("@/pages/Onboarding").then(m => ({ default: m.Onboarding })));
@@ -109,10 +108,9 @@ function Public({ children }: { children: React.ReactNode }) {
 
 function HomeEntry() {
   if (typeof window === "undefined") return <Home />;
-  if (!isDiscordActivityFrame()) return <Home />;
-  const matchId = normalizeMatchId(new URLSearchParams(window.location.search).get("custom_id"));
-  if (!matchId) return <Home />;
-  return <Navigate to={`/duel?join=${encodeURIComponent(matchId)}`} replace />;
+  const redirect = resolveDiscordEntryRedirect(window.location.pathname, window.location.search);
+  if (!redirect) return <Home />;
+  return <Navigate to={redirect} replace />;
 }
 
 const CONVEX_SITE_URL = (import.meta.env.VITE_CONVEX_URL ?? "")
@@ -140,6 +138,7 @@ export function App() {
       <RouteAudioContextSync />
       <SentryRoutes>
         <Route path="/" element={<Public><HomeEntry /></Public>} />
+        <Route path="/_discord/join" element={<Public><HomeEntry /></Public>} />
         <Route path="/privacy" element={<Public><Privacy /></Public>} />
         <Route path="/terms" element={<Public><Terms /></Public>} />
         <Route path="/about" element={<Public><About /></Public>} />

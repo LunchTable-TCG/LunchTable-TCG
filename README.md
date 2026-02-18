@@ -99,7 +99,10 @@ LTCG-v2/
 - Setup guide: `docs/integrations/discord-activity.md`
 - Required client env: `VITE_DISCORD_CLIENT_ID`
 - Required server env for OAuth code exchange: `DISCORD_CLIENT_SECRET`
+- Required server env for interactions verification: `DISCORD_PUBLIC_KEY`
 - Optional client env for URL mappings: `VITE_DISCORD_URL_MAPPINGS`
+- Discord mobile deep-link path: `/_discord/join`
+- Discord interactions endpoint: `/api/interactions`
 
 ## Audio Soundtrack
 
