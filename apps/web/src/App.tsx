@@ -32,6 +32,7 @@ const DeckBuilder = lazy(() => import("@/pages/DeckBuilder").then(m => ({ defaul
 const Cliques = lazy(() => import("@/pages/Cliques").then(m => ({ default: m.Cliques })));
 const Profile = lazy(() => import("@/pages/Profile").then(m => ({ default: m.Profile })));
 const Settings = lazy(() => import("@/pages/Settings").then(m => ({ default: m.Settings })));
+const DiscordCallback = lazy(() => import("@/pages/DiscordCallback").then(m => ({ default: m.DiscordCallback })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -139,6 +140,7 @@ export function App() {
       <SentryRoutes>
         <Route path="/" element={<Public><HomeEntry /></Public>} />
         <Route path="/_discord/join" element={<Public><HomeEntry /></Public>} />
+        <Route path="/_discord/callback" element={<Public><DiscordCallback /></Public>} />
         <Route path="/privacy" element={<Public><Privacy /></Public>} />
         <Route path="/terms" element={<Public><Terms /></Public>} />
         <Route path="/about" element={<Public><About /></Public>} />

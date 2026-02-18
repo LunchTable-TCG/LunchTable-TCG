@@ -9,19 +9,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "apps/web/src"),
       "@convex-generated-api": path.resolve(__dirname, "convex/_generated/api.js"),
-      "@lunchtable-tcg/cards": path.resolve(
-        __dirname,
-        "packages/lunchtable-tcg-cards/src/client/index.ts",
-      ),
+      // Workspace packages publish compiled output under `dist/`, but we don't commit
+      // build artifacts. Alias tests to the source entrypoints.
+      "@lunchtable-tcg/cards": path.resolve(__dirname, "packages/lunchtable-tcg-cards/src/client/index.ts"),
       "@lunchtable-tcg/engine": path.resolve(__dirname, "packages/engine/src/index.ts"),
-      "@lunchtable-tcg/match": path.resolve(
-        __dirname,
-        "packages/lunchtable-tcg-match/src/client/index.ts",
-      ),
-      "@lunchtable-tcg/story": path.resolve(
-        __dirname,
-        "packages/lunchtable-tcg-story/src/client/index.ts",
-      ),
+      "@lunchtable-tcg/match": path.resolve(__dirname, "packages/lunchtable-tcg-match/src/client/index.ts"),
+      "@lunchtable-tcg/story": path.resolve(__dirname, "packages/lunchtable-tcg-story/src/client/index.ts"),
+      "@lunchtable-tcg/guilds": path.resolve(__dirname, "packages/lunchtable-tcg-guilds/src/client/index.ts"),
     },
   },
   test: {
@@ -35,3 +29,4 @@ export default defineConfig({
     ],
   },
 });
+

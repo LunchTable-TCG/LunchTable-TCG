@@ -24,7 +24,7 @@ afterEach(() => {
 describe("clientPlatform", () => {
   it("defaults to web when no special host runtime is detected", () => {
     setMockWindow({
-      location: { search: "" },
+      location: { search: "", hostname: "lunchtable-one.vercel.app" },
       self: {},
       top: {},
     } as unknown as Window);
@@ -36,7 +36,7 @@ describe("clientPlatform", () => {
 
   it("detects Telegram mini app context", () => {
     setMockWindow({
-      location: { search: "" },
+      location: { search: "", hostname: "lunchtable-one.vercel.app" },
       self: {},
       top: {},
       Telegram: { WebApp: { initData: "token" } },
@@ -49,7 +49,7 @@ describe("clientPlatform", () => {
 
   it("detects Discord activity iframe context via query params", () => {
     setMockWindow({
-      location: { search: "?frame_id=123&guild_id=456" },
+      location: { search: "?frame_id=123&guild_id=456", hostname: "lunchtable-one.vercel.app" },
       self: {},
       top: {},
     } as unknown as Window);
@@ -61,13 +61,25 @@ describe("clientPlatform", () => {
 
   it("detects Discord activity when only channel query params are present", () => {
     setMockWindow({
-      location: { search: "?channel_id=789" },
+      location: { search: "?channel_id=789", hostname: "lunchtable-one.vercel.app" },
       self: {},
       top: {},
     } as unknown as Window);
 
     expect(isDiscordActivityFrame()).toBe(true);
     expect(detectClientPlatform()).toBe("discord");
+  });
+
+  it("detects Discord activity when running on a discordsays.com proxy origin", () => {
+    setMockWindow({
+      location: { search: "", hostname: "1473040239630221322.discordsays.com" },
+      self: {},
+      top: {},
+    } as unknown as Window);
+
+    expect(isDiscordActivityFrame()).toBe(true);
+    expect(detectClientPlatform()).toBe("discord");
+    expect(describeClientPlatform()).toBe("discord-activity");
   });
 
   it("formats known platform tags and ignores unknown values", () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { signalReady, onHostMessage, type HostToGame } from "@/lib/iframe";
+import { signalReady, onHostMessage, type HostToGame } from "../lib/iframe";
+import { isDiscordActivityFrame } from "../lib/clientPlatform";
 
 /**
  * Detect if the app is running inside an iframe (milaidy) or with
@@ -9,13 +10,33 @@ import { signalReady, onHostMessage, type HostToGame } from "@/lib/iframe";
  * - JWT (3 dot-separated base64 segments) → used for Convex real-time auth
  * - ltcg_ API key → used for HTTP API spectator mode
  */
+export function deriveIframeEmbedFlags({
+  isInIframe,
+  hasEmbedParam,
+  isDiscordActivity,
+}: {
+  isInIframe: boolean;
+  hasEmbedParam: boolean;
+  isDiscordActivity: boolean;
+}) {
+  // `isInIframe` is true for Discord Activities too, but the host-message handshake is
+  // only meant for the milaidy embed. Avoid spamming Discord's postMessage channel.
+  const isEmbedded = hasEmbedParam || (isInIframe && !isDiscordActivity);
+  return { isEmbedded };
+}
+
 export function useIframeMode() {
   const isInIframe =
     typeof window !== "undefined" && window.self !== window.top;
   const hasEmbedParam =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("embedded") === "true";
-  const isEmbedded = isInIframe || hasEmbedParam;
+  const isDiscordActivity = typeof window !== "undefined" && isDiscordActivityFrame();
+  const { isEmbedded } = deriveIframeEmbedFlags({
+    isInIframe,
+    hasEmbedParam,
+    isDiscordActivity,
+  });
 
   const [authToken, setAuthToken] = useState<string | null>(() =>
     readDebugAuthTokenFromQuery(),

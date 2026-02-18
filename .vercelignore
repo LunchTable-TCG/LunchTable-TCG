@@ -1,0 +1,15 @@
+.git
+.github
+.vercel
+node_modules
+**/node_modules
+apps/web/dist
+apps/web/public/lunchtable/tape.png
+apps/web/public/lunchtable/retro-tv.png
+apps/web/public/lunchtable/ciggarette-tray.png
+apps/web/public/lunchtable/music.png
+apps/web/public/lunchtable/stagesbg.png
+apps/web/public/lunchtable/soundtrack/*.mp3
+tools/promo-video/out
+video
+--with-vercel-json

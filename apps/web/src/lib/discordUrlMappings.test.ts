@@ -24,14 +24,18 @@ afterEach(() => {
 describe("discordUrlMappings", () => {
   it("derives default convex and convex-site mappings", () => {
     expect(deriveDefaultDiscordUrlMappings("https://foo.convex.cloud")).toEqual([
-      { prefix: "/.proxy/convex", target: "foo.convex.cloud" },
-      { prefix: "/.proxy/convex-site", target: "foo.convex.site" },
+      { prefix: "/privy", target: "auth.privy.io" },
+      { prefix: "/convex", target: "foo.convex.cloud" },
+      { prefix: "/convex-site", target: "foo.convex.site" },
     ]);
   });
 
   it("parses optional mapping JSON safely", () => {
     expect(parseDiscordUrlMappings('[{"prefix":"/x","target":"api.example.com"}]')).toEqual([
       { prefix: "/x", target: "api.example.com" },
+    ]);
+    expect(parseDiscordUrlMappings('[{"prefix":"/.proxy/convex","target":"api.example.com"}]')).toEqual([
+      { prefix: "/convex", target: "api.example.com" },
     ]);
     expect(parseDiscordUrlMappings("not-json")).toEqual([]);
     expect(parseDiscordUrlMappings(undefined)).toEqual([]);
@@ -46,8 +50,8 @@ describe("discordUrlMappings", () => {
       ]),
     });
 
-    expect(result).toContainEqual({ prefix: "/.proxy/convex", target: "foo.convex.cloud" });
-    expect(result).toContainEqual({ prefix: "/.proxy/convex-site", target: "foo.convex.site" });
+    expect(result).toContainEqual({ prefix: "/convex", target: "foo.convex.cloud" });
+    expect(result).toContainEqual({ prefix: "/convex-site", target: "foo.convex.site" });
     expect(result).toContainEqual({ prefix: "/custom", target: "api.example.com" });
     expect(result.filter((entry) => entry.prefix === "/custom")).toHaveLength(1);
   });

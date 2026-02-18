@@ -25,6 +25,8 @@ export function isTelegramMiniApp(): boolean {
 
 export function isDiscordActivityFrame(): boolean {
   if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname?.toLowerCase?.() ?? "";
+  if (hostname === "discordsays.com" || hostname.endsWith(".discordsays.com")) return true;
   const params = new URLSearchParams(window.location.search);
   return DISCORD_ACTIVITY_QUERY_KEYS.some((key) => params.has(key));
 }

@@ -4,8 +4,22 @@
  * Use `blob()` for dynamic paths or import specific constants.
  */
 
-const BLOB_BASE =
+import { isDiscordActivityFrame } from "./clientPlatform";
+
+const VERCEL_BLOB_BASE =
   "https://ubssmtksaikjji5g.public.blob.vercel-storage.com/lunchtable/lunchtable";
+
+// Discord Activities run behind a restrictive CSP (discordsays.com proxy). Using the
+// local `public/lunchtable/*` assets avoids blocked external image hosts and keeps
+// the Activity from looking like a broken/blank frame.
+const PUBLIC_ASSET_BASE = "/lunchtable";
+
+function resolveBlobBase(): string {
+  if (typeof window === "undefined") return VERCEL_BLOB_BASE;
+  return isDiscordActivityFrame() ? PUBLIC_ASSET_BASE : VERCEL_BLOB_BASE;
+}
+
+const BLOB_BASE = resolveBlobBase();
 
 /** Resolve a blob URL from a relative path (e.g. "logo.png", "vices/crypto.png") */
 export function blob(path: string): string {

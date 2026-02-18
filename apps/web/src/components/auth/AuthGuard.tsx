@@ -68,7 +68,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
     return <AuthLoadingScreen message="Checking sign-in..." />;
   }
 
-  if (!authenticated) return null;
+  if (!authenticated) {
+    return <AuthLoadingScreen message="Redirecting to sign in..." />;
+  }
 
   if (isLoading) {
     return <AuthLoadingScreen message="Entering the halls..." />;
