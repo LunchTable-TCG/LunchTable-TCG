@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIframeMode } from "@/hooks/useIframeMode";
 import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { TrayNav } from "@/components/layout/TrayNav";
+import { isDiscordActivityFrame } from "@/lib/clientPlatform";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
   STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG,
@@ -77,10 +78,19 @@ function Panel({
 export function Home() {
   const { isEmbedded } = useIframeMode();
   const navigate = useNavigate();
-  const { authenticated, login } = usePrivy();
+  const { ready, authenticated, login } = usePrivy();
+  const discordLoginTriggeredRef = useRef(false);
+  const isDiscordActivity = isDiscordActivityFrame();
 
   // After Privy login returns to Home, auto-navigate to the saved destination
   usePostLoginRedirect();
+
+  useEffect(() => {
+    if (!ready || !isDiscordActivity || authenticated) return;
+    if (discordLoginTriggeredRef.current) return;
+    discordLoginTriggeredRef.current = true;
+    login({ loginMethods: ["discord"] });
+  }, [ready, isDiscordActivity, authenticated, login]);
 
   const goTo = useCallback(
     (path: string, requiresAuth: boolean) => {

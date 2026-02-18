@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/react";
 import { Toaster } from "sonner";
 import { useIframeMode } from "@/hooks/useIframeMode";
 import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
+import { useDiscordAuth } from "@/hooks/auth/useDiscordAuth";
 import { useDiscordActivity } from "@/hooks/useDiscordActivity";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
@@ -115,6 +116,7 @@ export function App() {
   const { isEmbedded, authToken, isApiKey } = useIframeMode();
   useTelegramAuth();
   useDiscordActivity();
+  useDiscordAuth();
 
   if (isApiKey && authToken) {
     return (
