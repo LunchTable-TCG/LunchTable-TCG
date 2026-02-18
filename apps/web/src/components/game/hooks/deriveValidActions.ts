@@ -10,9 +10,10 @@ export type ValidActions = {
   canFlipSummon: Set<string>;
 };
 
-const MAX_BOARD_SLOTS = 3;
-const MAX_SPELL_TRAP_SLOTS = 3;
-const TRIBUTE_LEVEL = 7;
+const toFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
+};
 
 export function deriveValidActions(params: {
   view: PlayerView | null;
@@ -39,15 +40,16 @@ export function deriveValidActions(params: {
   if (!isChainWindow && !isMyTurn) return va;
 
   const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
-  const maxBoardSlots = view.maxBoardSlots ?? MAX_BOARD_SLOTS;
-  const maxSpellTrapSlots = view.maxSpellTrapSlots ?? MAX_SPELL_TRAP_SLOTS;
-  const normalSummonedThisTurn = view.normalSummonedThisTurn ?? false;
+  const maxBoardSlots = toFiniteNumber(view.maxBoardSlots) ?? 3;
+  const maxSpellTrapSlots = toFiniteNumber(view.maxSpellTrapSlots) ?? 3;
+  const normalSummonedThisTurn = view.normalSummonedThisTurn === true;
   const board = view.board ?? [];
   const hand = view.hand ?? [];
   const stZone = view.spellTrapZone ?? [];
   const opponentBoard = view.opponentBoard ?? [];
   const hasBoardSpace = board.length < maxBoardSlots;
   const hasTributeCandidates = board.some((card) => !card.faceDown);
+  const hasSpellTrapSpace = stZone.length < maxSpellTrapSlots;
 
   if (isMainPhase) {
     if (!normalSummonedThisTurn) {
@@ -56,7 +58,7 @@ export function deriveValidActions(params: {
         if (!card) continue;
         if (card.cardType === "stereotype" || card.type === "stereotype") {
           const level = card.level ?? 0;
-          const needsTribute = level >= TRIBUTE_LEVEL;
+          const needsTribute = level >= 7;
 
           if (needsTribute) {
             if (hasTributeCandidates) {
@@ -72,7 +74,7 @@ export function deriveValidActions(params: {
         }
       }
 
-      if (stZone.length < maxSpellTrapSlots) {
+      if (hasSpellTrapSpace) {
         for (const cardId of hand) {
           const card = cardLookup[cardId];
           if (!card) continue;

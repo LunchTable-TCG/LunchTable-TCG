@@ -114,6 +114,24 @@ describe("assertInitialStateIntegrity", () => {
     );
   });
 
+  it("rejects non-empty current chain as invalid initial state", () => {
+    const state = makeInitialState({
+      currentChain: [{ id: "1" } as any],
+    } as unknown as Partial<GameState>);
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
+      "initialState must start with no active chain",
+    );
+  });
+
+  it("rejects open field spells or modifiers at match start", () => {
+    const state = makeInitialState({
+      hostFieldSpell: { cardId: "field", definitionId: "f1" } as any,
+    } as unknown as Partial<GameState>);
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
+      "initialState must start with empty board and discard zones",
+    );
+  });
+
   it("rejects missing card definitions", () => {
     const state = makeInitialState({
       cardLookup: {

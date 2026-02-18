@@ -136,7 +136,10 @@ export async function resolveMatchAndSeat(
 	matchId: string,
 	requestedSeat?: string,
 ) {
-	const meta = await ctx.runQuery(api.game.getMatchMeta, { matchId });
+	const meta = await ctx.runQuery(api.game.getMatchMeta, {
+		matchId,
+		actorUserId: agentUserId,
+	});
 	if (!meta) {
 		throw new Error("Match not found");
 	}
@@ -389,6 +392,7 @@ corsRoute({
 				matchId,
 				command: JSON.stringify(normalizedCommand),
 				seat: resolvedSeat,
+				actorUserId: agent.userId,
 				expectedVersion:
 					typeof expectedVersion === "number"
 						? Number(expectedVersion)
@@ -432,6 +436,7 @@ corsRoute({
 			const view = await ctx.runQuery(api.game.getPlayerView, {
 				matchId,
 				seat,
+				actorUserId: agent.userId,
 			});
 			if (!view) return errorResponse("Match state not found", 404);
 			// getPlayerView returns a JSON string — parse before wrapping
@@ -1489,7 +1494,10 @@ async function buildTelegramMatchSummary(
   ctx: { runQuery: any },
   args: { matchId: string; userId: string; page?: number },
 ): Promise<{ text: string; replyMarkup: TelegramInlineKeyboardMarkup }> {
-  const meta = await ctx.runQuery(api.game.getMatchMeta, { matchId: args.matchId });
+  const meta = await ctx.runQuery(api.game.getMatchMeta, {
+    matchId: args.matchId,
+    actorUserId: args.userId,
+  });
   const status = String((meta as any)?.status ?? "unknown").toUpperCase();
   const mode = String((meta as any)?.mode ?? "unknown").toUpperCase();
   const winner = (meta as any)?.winner ? String((meta as any).winner).toUpperCase() : null;

@@ -2039,9 +2039,22 @@ export const getRecentEvents = query({
 });
 
 export const getLatestSnapshotVersion = query({
-  args: { matchId: v.string() },
+  args: {
+    matchId: v.string(),
+    actorUserId: v.optional(v.id("users")),
+  },
   returns: v.any(),
-  handler: async (ctx, args) => match.getLatestSnapshotVersion(ctx, args),
+  handler: async (ctx, args) => {
+    await requireMatchParticipant(
+      ctx,
+      args.matchId,
+      undefined,
+      args.actorUserId ? String(args.actorUserId) : undefined,
+    );
+    return match.getLatestSnapshotVersion(ctx, {
+      matchId: args.matchId,
+    });
+  },
 });
 
 export const getActiveMatchByHost = query({

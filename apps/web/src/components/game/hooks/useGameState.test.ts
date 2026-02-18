@@ -16,6 +16,8 @@ describe("deriveValidActions", () => {
       ],
       spellTrapZone: [],
       opponentBoard: [],
+      maxBoardSlots: 3,
+      maxSpellTrapSlots: 3,
       currentTurnPlayer: "host",
       currentPriorityPlayer: "host",
       turnNumber: 3,
@@ -60,6 +62,143 @@ describe("deriveValidActions", () => {
 
     expect(result.canSummon.size).toBe(0);
     expect(result.canSetMonster.size).toBe(0);
+  });
+
+  it("derives summon limits from view maxBoardSlots", () => {
+    const view = {
+      hand: ["monster-in-hand"],
+      board: [{ cardId: "m1", turnSummoned: 1, faceDown: false, canAttack: false, hasAttackedThisTurn: false }],
+      spellTrapZone: [],
+      opponentBoard: [],
+      maxBoardSlots: 1,
+      maxSpellTrapSlots: 3,
+      currentTurnPlayer: "host",
+      currentPriorityPlayer: "host",
+      turnNumber: 3,
+      currentPhase: "main",
+      currentChain: [],
+      mySeat: "host",
+      gameOver: false,
+      handSize: 0,
+    } as unknown as PlayerView;
+
+    const cardLookup = {
+      "monster-in-hand": {
+        _id: "monster-in-hand",
+        type: "stereotype",
+        cardType: "stereotype",
+        cardName: "Mock Monster",
+        level: 4,
+      },
+    } as Record<string, any>;
+
+    const result = deriveValidActions({
+      view,
+      cardLookup,
+      isMyTurn: true,
+      isChainWindow: false,
+      isChainResponder: true,
+      gameOver: false,
+    });
+
+    expect(result.canSummon.size).toBe(0);
+    expect(result.canSetMonster.size).toBe(0);
+  });
+
+  it("blocks normal summon actions after a normal summon was already used", () => {
+    const view = {
+      hand: ["monster-in-hand"],
+      board: [],
+      spellTrapZone: [],
+      opponentBoard: [],
+      maxBoardSlots: 3,
+      maxSpellTrapSlots: 3,
+      normalSummonedThisTurn: true,
+      currentTurnPlayer: "host",
+      currentPriorityPlayer: "host",
+      turnNumber: 3,
+      currentPhase: "main",
+      currentChain: [],
+      mySeat: "host",
+      gameOver: false,
+      handSize: 0,
+    } as unknown as PlayerView;
+
+    const cardLookup = {
+      "monster-in-hand": {
+        _id: "monster-in-hand",
+        type: "stereotype",
+        cardType: "stereotype",
+        cardName: "Mock Monster",
+        level: 4,
+      },
+    } as Record<string, any>;
+
+    const result = deriveValidActions({
+      view,
+      cardLookup,
+      isMyTurn: true,
+      isChainWindow: false,
+      isChainResponder: true,
+      gameOver: false,
+    });
+
+    expect(result.canSummon.size).toBe(0);
+    expect(result.canSetMonster.size).toBe(0);
+  });
+
+  it("uses maxSpellTrapSlots from view when evaluating spell trap set capacity", () => {
+    const view = {
+      hand: ["normal-spell"],
+      board: [],
+      spellTrapZone: [
+        {
+          cardId: "st1",
+          definitionId: "st-1",
+          cardName: "Face-up spell",
+          faceDown: false,
+          canAttack: false,
+          hasAttackedThisTurn: false,
+          position: "attack",
+          temporaryBoosts: { attack: 0, defense: 0 },
+          turnSummoned: 1,
+          location: "spell_trap_zone",
+          turnSet: 1,
+        } as any,
+      ],
+      opponentBoard: [],
+      maxBoardSlots: 3,
+      maxSpellTrapSlots: 1,
+      currentTurnPlayer: "host",
+      currentPriorityPlayer: "host",
+      turnNumber: 3,
+      currentPhase: "main",
+      currentChain: [],
+      mySeat: "host",
+      gameOver: false,
+      handSize: 0,
+    } as unknown as PlayerView;
+
+    const cardLookup = {
+      "normal-spell": {
+        _id: "normal-spell",
+        type: "spell",
+        cardType: "spell",
+        cardName: "Normal Spell",
+      },
+    } as Record<string, any>;
+
+    const result = deriveValidActions({
+      view,
+      cardLookup,
+      isMyTurn: true,
+      isChainWindow: false,
+      isChainResponder: true,
+      gameOver: false,
+    });
+
+    expect(result.canSetSpellTrap.size).toBe(0);
+    expect(result.canActivateSpell.size).toBe(0);
   });
 
   it("suppresses all actions when chain window is active and player is not chain responder", () => {
