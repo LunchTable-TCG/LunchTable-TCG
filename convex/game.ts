@@ -893,8 +893,8 @@ async function createPvpLobbyForUserCore(
   }
 
   const active = await match.getActiveMatchByHost(ctx, { hostId: user._id });
-  if (active && (active as any).status === "active") {
-    throw new Error("Finish your active match before creating a new PvP lobby.");
+  if (active) {
+    throw new Error("Finish or cancel your existing match before creating a new PvP lobby.");
   }
 
   const { deckData } = await resolveActiveDeckForStory(ctx, user);
@@ -935,6 +935,11 @@ async function joinPvpLobbyForUserCore(
 ) {
   const user = await ctx.db.get(userId as any);
   if (!user) throw new Error("User not found.");
+
+  const active = await match.getActiveMatchByHost(ctx, { hostId: user._id });
+  if (active && String((active as any)._id ?? "") !== matchId) {
+    throw new Error("Finish or cancel your existing match before joining another lobby.");
+  }
 
   const meta = await match.getMatchMeta(ctx, { matchId });
   if (!meta) throw new Error("Match not found.");

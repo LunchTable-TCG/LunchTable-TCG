@@ -16,7 +16,7 @@ type TelegramInitChat = {
 
 const encoder = new TextEncoder();
 const internalApi: any = internal;
-const TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = 10 * 60;
+const TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = 5 * 60;
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -150,6 +150,14 @@ async function upsertTelegramIdentityForUser(
   },
 ) {
   const now = Date.now();
+  const existingUserByTelegram = await ctx.db
+    .query("users")
+    .withIndex("by_telegramUserId", (q: any) => q.eq("telegramUserId", telegramUserId))
+    .first();
+  if (existingUserByTelegram && existingUserByTelegram._id !== userId) {
+    throw new Error("This Telegram account is already linked to another user.");
+  }
+
   const existingByTelegram = await ctx.db
     .query("telegramIdentities")
     .withIndex("by_telegramUserId", (q: any) => q.eq("telegramUserId", telegramUserId))

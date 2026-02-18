@@ -28,16 +28,26 @@ export function useTelegramAuth() {
   const { authenticated, user, linkTelegram } = usePrivy();
   const linkTelegramFromMiniApp = useConvexMutation(apiAny.telegram.linkTelegramFromMiniApp);
   const linked = useRef(false);
+  const linking = useRef(false);
+  const attempted = useRef(false);
   const isTelegram = isTelegramMiniApp();
 
   useEffect(() => {
-    if (!isTelegram || !authenticated || linked.current) return;
+    if (!authenticated) {
+      linked.current = false;
+      linking.current = false;
+      attempted.current = false;
+      return;
+    }
+    if (!isTelegram || linked.current || linking.current || attempted.current) return;
 
     const hasTelegram = user?.linkedAccounts?.some(
       (a) => a.type === "telegram",
     );
 
     async function link() {
+      linking.current = true;
+      attempted.current = true;
       try {
         const { retrieveRawInitData } = await import("@telegram-apps/bridge");
         const initDataRaw = retrieveRawInitData() ?? "";
@@ -53,6 +63,8 @@ export function useTelegramAuth() {
         linked.current = true;
       } catch {
         // Linking may fail if already linked or params expired — safe to ignore
+      } finally {
+        linking.current = false;
       }
     }
 
