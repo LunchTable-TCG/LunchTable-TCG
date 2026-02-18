@@ -6,6 +6,7 @@ import {
   type IframeChatMessage,
   type StartMatchPayload,
 } from "@/lib/iframe";
+import { isDiscordActivityFrame } from "@/lib/clientPlatform";
 
 export type IframeChatState = {
   enabled: boolean;
@@ -13,6 +14,21 @@ export type IframeChatState = {
   messages: IframeChatMessage[];
   reason?: string;
 };
+
+export function deriveIframeEmbedFlags({
+  isInIframe,
+  hasEmbedParam,
+  isDiscordActivity,
+}: {
+  isInIframe: boolean;
+  hasEmbedParam: boolean;
+  isDiscordActivity: boolean;
+}) {
+  // Discord Activities run in an iframe too, but host messaging here is meant
+  // only for the milaidy embed bridge.
+  const isEmbedded = hasEmbedParam || (isInIframe && !isDiscordActivity);
+  return { isEmbedded };
+}
 
 /**
  * Detect if the app is running inside an iframe (milaidy) or with
@@ -28,7 +44,13 @@ export function useIframeMode() {
   const hasEmbedParam =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("embedded") === "true";
-  const isEmbedded = isInIframe || hasEmbedParam;
+  const isDiscordActivity =
+    typeof window !== "undefined" && isDiscordActivityFrame();
+  const { isEmbedded } = deriveIframeEmbedFlags({
+    isInIframe,
+    hasEmbedParam,
+    isDiscordActivity,
+  });
 
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);

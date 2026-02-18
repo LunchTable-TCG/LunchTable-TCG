@@ -1433,12 +1433,111 @@ function resolveAICupSeat(meta: any): "host" | "away" | null {
   return null;
 }
 
+async function resolveActor(
+  ctx: any,
+  actorUserId?: string,
+  dependencies?: {
+    getUserById?: (ctx: any, actorUserId: string) => Promise<{ _id: string } | null>;
+    requireUserFn?: (ctx: any) => Promise<{ _id: string }>;
+  },
+) {
+  const getUserById =
+    dependencies?.getUserById ??
+    (async (innerCtx: any, userId: string) => innerCtx.db.get(userId as any));
+  const requireUserFn = dependencies?.requireUserFn ?? requireUser;
+
+  if (actorUserId) {
+    const actor = await getUserById(ctx, actorUserId);
+    if (!actor) {
+      throw new Error("Actor user not found.");
+    }
+    return actor;
+  }
+  return requireUserFn(ctx);
+}
+
+async function assertActorMatchesAuthenticatedUser(
+  ctx: any,
+  actorUserId?: string,
+  dependencies?: {
+    requireUserFn?: (ctx: any) => Promise<{ _id: string }>;
+  },
+) {
+  const requireUserFn = dependencies?.requireUserFn ?? requireUser;
+  const user = await requireUserFn(ctx);
+  if (actorUserId && String(actorUserId) !== user._id) {
+    throw new Error("actorUserId must match authenticated user.");
+  }
+  return user;
+}
+
 function resolveSeatForUser(meta: any, userId: string): "host" | "away" | null {
   if (!meta || !userId) return null;
   if ((meta as any)?.hostId === userId) return "host";
   if ((meta as any)?.awayId === userId) return "away";
   return null;
 }
+
+async function requireMatchParticipant(
+  ctx: any,
+  matchId: string,
+  seat?: "host" | "away",
+  actorUserId?: string,
+  dependencies?: {
+    resolveActorFn?: (
+      ctx: any,
+      actorUserId?: string,
+    ) => Promise<{ _id: string }>;
+    getMatchMetaFn?: (
+      ctx: any,
+      matchId: string,
+    ) => Promise<{ hostId?: string | null; awayId?: string | null } | null>;
+  },
+) {
+  const resolveActorFn = dependencies?.resolveActorFn ?? resolveActor;
+  const getMatchMetaFn =
+    dependencies?.getMatchMetaFn ??
+    (async (innerCtx: any, innerMatchId: string) =>
+      match.getMatchMeta(innerCtx, { matchId: innerMatchId }));
+
+  const actor = await resolveActorFn(ctx, actorUserId);
+  const meta = await getMatchMetaFn(ctx, matchId);
+  if (!meta) {
+    throw new Error("Match not found.");
+  }
+
+  const participantSeat = resolveSeatForUser(meta, actor._id);
+  if (!participantSeat) {
+    throw new Error("You are not a participant in this match.");
+  }
+  if (seat && participantSeat !== seat) {
+    throw new Error("Seat does not match the authenticated player.");
+  }
+
+  return { actor, meta, seat: participantSeat };
+}
+
+function assertStoryMatchRequesterAuthorized(
+  storyMatch: { userId: string },
+  requesterUserId: string,
+  meta: { hostId?: string | null; awayId?: string | null } | null,
+) {
+  if (storyMatch.userId === requesterUserId) {
+    return;
+  }
+
+  const requesterSeat = resolveSeatForUser(meta, requesterUserId);
+  if (!requesterSeat) {
+    throw new Error("Not your match");
+  }
+}
+
+export const __test = {
+  resolveActor,
+  assertActorMatchesAuthenticatedUser,
+  requireMatchParticipant,
+  assertStoryMatchRequesterAuthorized,
+};
 
 async function requireSeatOwnership(
   ctx: any,
