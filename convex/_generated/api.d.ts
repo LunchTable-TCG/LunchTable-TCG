@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as seed from "../seed.js";
 import type * as telegram from "../telegram.js";
 import type * as telegramInline from "../telegramInline.js";
+import type * as telegramLinks from "../telegramLinks.js";
 
 import type {
   ApiFromModules,
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   seed: typeof seed;
   telegram: typeof telegram;
   telegramInline: typeof telegramInline;
+  telegramLinks: typeof telegramLinks;
 }>;
 
 /**

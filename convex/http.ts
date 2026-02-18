@@ -6,6 +6,7 @@ import {
   fallbackInlineCommands,
   paginateInlineCommands,
 } from "./telegramInline";
+import { getTelegramMiniAppDeepLink } from "./telegramLinks";
 
 const http = httpRouter();
 
@@ -129,6 +130,7 @@ type TelegramBotUser = {
 type TelegramCallbackQuery = {
   id: string;
   data?: string;
+  game_short_name?: string;
   from?: TelegramBotUser;
   inline_message_id?: string;
   message?: {
@@ -169,7 +171,6 @@ type TelegramMatchSummary = {
 const TELEGRAM_INLINE_ACTION_TTL_MS = 5 * 60 * 1000;
 const TELEGRAM_INLINE_PRIMARY_CAP = 24;
 const TELEGRAM_INLINE_PAGE_SIZE = 6;
-const TELEGRAM_INLINE_MINI_APP_FALLBACK = "https://telegram.org";
 const internalApi = internal;
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -197,11 +198,40 @@ function escapeTelegramHtml(value: string): string {
 }
 
 function getTelegramDeepLink(matchId?: string): string {
-  const username = (process.env.TELEGRAM_BOT_USERNAME ?? "").trim();
-  if (!username) return TELEGRAM_INLINE_MINI_APP_FALLBACK;
-  const cleanUsername = username.replace(/^@/, "");
-  const startAppParam = matchId ? `m_${matchId}` : "home";
-  return `https://t.me/${cleanUsername}?startapp=${encodeURIComponent(startAppParam)}`;
+  return getTelegramMiniAppDeepLink(matchId);
+}
+
+function sanitizeTelegramGameShortName(raw: string | undefined | null): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  if (!/^[A-Za-z0-9_]{3,64}$/.test(value)) return null;
+  return value;
+}
+
+function getTelegramGameShortName(): string | null {
+  return sanitizeTelegramGameShortName(process.env.TELEGRAM_GAME_SHORT_NAME);
+}
+
+function getTelegramWebAppBaseUrl(): string | null {
+  const raw = (process.env.TELEGRAM_WEB_APP_URL ?? "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function buildTelegramGameLaunchUrl(): string | null {
+  const baseUrl = getTelegramWebAppBaseUrl();
+  if (!baseUrl) return null;
+  const url = new URL(baseUrl);
+  url.pathname = "/duel";
+  url.searchParams.set("source", "tg_game");
+  return url.toString();
 }
 
 function getTelegramApiBase(): string {
@@ -287,6 +317,16 @@ async function telegramAnswerCallbackQuery(
     callback_query_id: callbackQueryId,
     text,
     show_alert: showAlert,
+  });
+}
+
+async function telegramAnswerCallbackQueryWithUrl(
+  callbackQueryId: string,
+  url: string,
+) {
+  await telegramApiCall("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    url,
   });
 }
 
@@ -1210,6 +1250,30 @@ async function handleTelegramStartMessage(
   await telegramSendMessage(chatId, intro, keyboard);
 }
 
+async function handleTelegramGameCommandMessage(
+  message: TelegramMessage,
+) {
+  const chatId = message.chat?.id;
+  if (!chatId) return;
+
+  const gameShortName = getTelegramGameShortName();
+  if (!gameShortName) {
+    await telegramSendMessage(
+      chatId,
+      "<b>Game not configured.</b>\nAsk the team to set <code>TELEGRAM_GAME_SHORT_NAME</code>.",
+      {
+        inline_keyboard: [[{ text: "Open Mini App", url: getTelegramDeepLink() }]],
+      },
+    );
+    return;
+  }
+
+  await telegramApiCall("sendGame", {
+    chat_id: chatId,
+    game_short_name: gameShortName,
+  });
+}
+
 async function handleTelegramInlineQuery(
   inlineQuery: TelegramInlineQuery,
 ) {
@@ -1217,6 +1281,15 @@ async function handleTelegramInlineQuery(
   const requestedMatchId = parseTelegramMatchIdToken(queryText);
   const results: unknown[] = [];
   const openMiniAppButton = { text: "Open Mini App", url: getTelegramDeepLink() };
+
+  const gameShortName = getTelegramGameShortName();
+  if (gameShortName) {
+    results.push({
+      type: "game",
+      id: "play_game",
+      game_short_name: gameShortName,
+    });
+  }
 
   results.push({
     type: "article",
@@ -1269,10 +1342,44 @@ async function handleTelegramInlineQuery(
   await telegramAnswerInlineQuery(inlineQuery.id, results);
 }
 
+async function handleTelegramGameCallbackQuery(
+  callbackQuery: TelegramCallbackQuery,
+) {
+  const requestedShortName = (callbackQuery.game_short_name ?? "").trim();
+  if (!requestedShortName) return;
+
+  const configuredShortName = getTelegramGameShortName();
+  if (!configuredShortName) {
+    await telegramAnswerCallbackQuery(callbackQuery.id, "Game is not configured.", true);
+    return;
+  }
+  if (configuredShortName !== requestedShortName) {
+    await telegramAnswerCallbackQuery(callbackQuery.id, "Unknown game.", true);
+    return;
+  }
+
+  const launchUrl = buildTelegramGameLaunchUrl();
+  if (!launchUrl) {
+    await telegramAnswerCallbackQuery(
+      callbackQuery.id,
+      "Missing TELEGRAM_WEB_APP_URL for game launch.",
+      true,
+    );
+    return;
+  }
+
+  await telegramAnswerCallbackQueryWithUrl(callbackQuery.id, launchUrl);
+}
+
 async function handleTelegramCallbackQuery(
   ctx: { runMutation: any; runQuery: any },
   callbackQuery: TelegramCallbackQuery,
 ) {
+  if (typeof callbackQuery.game_short_name === "string" && callbackQuery.game_short_name.trim()) {
+    await handleTelegramGameCallbackQuery(callbackQuery);
+    return;
+  }
+
   const data = (callbackQuery.data ?? "").trim();
   if (!data) {
     await telegramAnswerCallbackQuery(callbackQuery.id, "No callback payload.");
@@ -1386,6 +1493,11 @@ async function handleTelegramUpdate(
 ) {
   if (update.message?.text?.startsWith("/start")) {
     await handleTelegramStartMessage(ctx, update.message);
+    return;
+  }
+
+  if (update.message?.text?.startsWith("/game")) {
+    await handleTelegramGameCommandMessage(update.message);
     return;
   }
 

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireUser } from "./auth";
+import { getTelegramMiniAppDeepLink } from "./telegramLinks";
 
 type TelegramInitUser = {
   id: number;
@@ -505,11 +506,7 @@ export const notifyUserMatchTransition = internalAction({
 
     const matchMeta = await ctx.runQuery(api.game.getMatchMeta, { matchId: args.matchId });
     const statusText = String((matchMeta as any)?.status ?? "updated").toUpperCase();
-
-    const botUsername = (process.env.TELEGRAM_BOT_USERNAME ?? "").trim().replace(/^@/, "");
-    const deepLink = botUsername
-      ? `https://t.me/${botUsername}?startapp=${encodeURIComponent(`m_${args.matchId}`)}`
-      : "https://telegram.org";
+    const deepLink = getTelegramMiniAppDeepLink(args.matchId);
 
     const lines = [
       "<b>LunchTable Duel Update</b>",

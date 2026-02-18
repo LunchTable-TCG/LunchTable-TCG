@@ -24,11 +24,15 @@ export function Duel() {
   const [activeLobbyId, setActiveLobbyId] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copiedLabel, setCopiedLabel] = useState<"web" | "tg" | null>(null);
+  const [copiedLabel, setCopiedLabel] = useState<"web" | "tgMini" | "tgGame" | null>(null);
 
   const client = isTelegramMiniApp() ? "telegram_miniapp" : "web";
   const botUsernameRaw = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME ?? "").trim();
   const botUsername = botUsernameRaw.replace(/^@/, "");
+  const miniAppShortNameRaw = (import.meta.env.VITE_TELEGRAM_MINIAPP_SHORT_NAME ?? "").trim();
+  const miniAppShortName = /^[A-Za-z0-9_]{3,64}$/.test(miniAppShortNameRaw) ? miniAppShortNameRaw : "";
+  const gameShortNameRaw = (import.meta.env.VITE_TELEGRAM_GAME_SHORT_NAME ?? "").trim();
+  const gameShortName = /^[A-Za-z0-9_]{3,64}$/.test(gameShortNameRaw) ? gameShortNameRaw : "";
 
   const webJoinLink = useMemo(
     () => (activeLobbyId ? `${buildOrigin()}/play/${activeLobbyId}?autojoin=1` : ""),
@@ -37,9 +41,20 @@ export function Duel() {
   const telegramJoinLink = useMemo(
     () =>
       activeLobbyId && botUsername
-        ? `https://t.me/${botUsername}?startapp=m_${encodeURIComponent(activeLobbyId)}`
+        ? miniAppShortName
+          ? `https://t.me/${botUsername}/${miniAppShortName}?startapp=${encodeURIComponent(
+              `m_${activeLobbyId}`,
+            )}`
+          : `https://t.me/${botUsername}?startapp=${encodeURIComponent(`m_${activeLobbyId}`)}`
         : "",
-    [activeLobbyId, botUsername],
+    [activeLobbyId, botUsername, miniAppShortName],
+  );
+  const telegramGameLink = useMemo(
+    () =>
+      botUsername && gameShortName
+        ? `https://t.me/${botUsername}?game=${encodeURIComponent(gameShortName)}`
+        : "",
+    [botUsername, gameShortName],
   );
 
   const handleCreateLobby = async () => {
@@ -78,7 +93,7 @@ export function Duel() {
     }
   };
 
-  const handleCopy = async (label: "web" | "tg", value: string) => {
+  const handleCopy = async (label: "web" | "tgMini" | "tgGame", value: string) => {
     try {
       const copied = await copyToClipboard(value);
       if (copied) {
@@ -200,9 +215,9 @@ export function Duel() {
                     <button
                       type="button"
                       className="tcg-button px-3"
-                      onClick={() => handleCopy("tg", telegramJoinLink)}
+                      onClick={() => handleCopy("tgMini", telegramJoinLink)}
                     >
-                      {copiedLabel === "tg" ? "Copied" : "Copy"}
+                      {copiedLabel === "tgMini" ? "Copied" : "Copy"}
                     </button>
                   </div>
                 ) : (
@@ -211,6 +226,25 @@ export function Duel() {
                   </p>
                 )}
               </div>
+              {telegramGameLink ? (
+                <div>
+                  <p className="font-bold text-[#121212]">Telegram Game</p>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      readOnly
+                      value={telegramGameLink}
+                      className="w-full border-2 border-[#121212] bg-white px-2 py-1 text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      className="tcg-button px-3"
+                      onClick={() => handleCopy("tgGame", telegramGameLink)}
+                    >
+                      {copiedLabel === "tgGame" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         )}
