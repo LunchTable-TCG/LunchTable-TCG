@@ -10,7 +10,10 @@
       "category": "game",
       "launchType": "connect",
       "launchUrl": "http://localhost:3334",
-      "capabilities": ["observe", "control"],
+      "capabilities": [
+        "observe",
+        "control"
+      ],
       "minPlayers": 1,
       "maxPlayers": 2,
       "viewer": {
@@ -41,11 +44,10 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@sentry/react": "^9.41.0",
-    "@sentry/vite-plugin": "^4.9.1",
     "@telegram-apps/bridge": "^2.11.0",
     "@vercel/blob": "^2.2.0",
     "clsx": "^2.1.1",
-    "convex": "^1.31.6",
+    "convex": "^1.31.7",
     "framer-motion": "^12.29.0",
     "lucide-react": "^0.562.0",
     "posthog-js": "^1.347.2",
@@ -60,7 +62,6 @@
     "@tailwindcss/vite": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@vercel/node": "^5.6.3",
     "@vitejs/plugin-react": "^4.5.2",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0",

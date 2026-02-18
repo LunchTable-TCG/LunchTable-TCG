@@ -1,0 +1,6 @@
+[run]
+bun = true
+
+[install]
+# Ensure platform-native rollup binaries get installed
+trustedDependencies = ["rollup", "@rollup/rollup-darwin-arm64", "@rollup/rollup-darwin-x64", "@rollup/rollup-linux-x64-gnu"]
