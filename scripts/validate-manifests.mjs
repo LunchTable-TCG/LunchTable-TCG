@@ -10,6 +10,7 @@ const isDevBuild =
 const manifests = [
   path.join(repoRoot, "apps/web/package.json"),
   path.join(repoRoot, "packages/plugin-ltcg/package.json"),
+  path.join(repoRoot, "packages/app-lunchtable/package.json"),
 ];
 
 const localHostPattern = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;

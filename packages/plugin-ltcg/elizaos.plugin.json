@@ -1,0 +1,27 @@
+{
+  "id": "ltcg",
+  "name": "LunchTable TCG Plugin",
+  "description": "ElizaOS plugin enabling AI agents to play LunchTable Trading Card Game",
+  "version": "0.1.0",
+  "kind": "plugin",
+  "requiredSecrets": ["LTCG_API_URL", "LTCG_API_KEY"],
+  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "LTCG_API_URL": {
+        "type": "string",
+        "description": "Convex site URL"
+      },
+      "LTCG_API_KEY": {
+        "type": "string",
+        "description": "Agent API key (starts with ltcg_)"
+      },
+      "LTCG_SOUNDTRACK_API_URL": {
+        "type": "string",
+        "description": "Optional soundtrack endpoint"
+      }
+    },
+    "required": ["LTCG_API_URL", "LTCG_API_KEY"]
+  }
+}

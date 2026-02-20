@@ -124,6 +124,16 @@ const PACKAGES = [
       },
     },
   },
+  {
+    name: "@lunchtable-tcg/app-lunchtable",
+    dir: join(PACKAGES_DIR, "app-lunchtable"),
+    exports: {
+      ".": {
+        types: "./dist/index.d.ts",
+        default: "./dist/index.js",
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

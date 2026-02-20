@@ -15,7 +15,7 @@
     "dev:web": "cd apps/web && bun run dev",
     "check:manifests": "node scripts/validate-manifests.mjs",
     "lint": "bun run check:manifests && bun run typecheck",
-    "typecheck": "bunx tsc --noEmit -p apps/web/tsconfig.json && bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/plugin-ltcg/tsconfig.json",
+    "typecheck": "bunx tsc --noEmit -p apps/web/tsconfig.json && bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/plugin-ltcg/tsconfig.json && bunx tsc --noEmit -p packages/app-lunchtable/tsconfig.json",
     "test": "vitest",
     "test:once": "vitest run",
     "test:package-exports": "node scripts/test-package-exports.mjs",
