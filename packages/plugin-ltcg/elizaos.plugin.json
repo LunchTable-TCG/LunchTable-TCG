@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "kind": "plugin",
   "requiredSecrets": ["LTCG_API_URL", "LTCG_API_KEY"],
-  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL"],
+  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN"],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -20,6 +20,14 @@
       "LTCG_SOUNDTRACK_API_URL": {
         "type": "string",
         "description": "Optional soundtrack endpoint"
+      },
+      "RETAKE_API_URL": {
+        "type": "string",
+        "description": "retake.tv API base URL (e.g. https://retake.tv/api/v1)"
+      },
+      "RETAKE_AGENT_TOKEN": {
+        "type": "string",
+        "description": "retake.tv agent access token (from registration)"
       }
     },
     "required": ["LTCG_API_URL", "LTCG_API_KEY"]

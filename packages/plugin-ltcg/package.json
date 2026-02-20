@@ -55,12 +55,23 @@
         "type": "string",
         "description": "Optional web endpoint that serves soundtrack JSON (e.g. https://app.example.com/api/soundtrack)",
         "required": false
+      },
+      "RETAKE_API_URL": {
+        "type": "string",
+        "description": "retake.tv API base URL for streaming (e.g. https://retake.tv/api/v1)",
+        "required": false
+      },
+      "RETAKE_AGENT_TOKEN": {
+        "type": "string",
+        "description": "retake.tv agent access token from registration",
+        "required": false,
+        "sensitive": true
       }
     }
   },
   "elizaos": {
     "kind": "plugin",
     "displayName": "LunchTable TCG Plugin",
-    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL"]
+    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN"]
   }
 }

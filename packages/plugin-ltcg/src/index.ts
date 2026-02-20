@@ -22,6 +22,12 @@
  *   CHECK_LTCG_STATUS  — Check current match state
  *   SURRENDER_LTCG     — Forfeit the current match
  *   GET_LTCG_SOUNDTRACK — Fetch soundtrack catalog for agent streaming
+ *   REGISTER_RETAKE_STREAM — Register agent on retake.tv for streaming
+ *   START_RETAKE_STREAM  — Start a live stream session on retake.tv
+ *   STOP_RETAKE_STREAM   — Stop the current retake.tv stream
+ *   CHECK_RETAKE_STATUS  — Check if stream is live + viewer count
+ *   GET_RTMP_CREDENTIALS — Get RTMP URL + stream key for OBS/ffmpeg
+ *   SEND_RETAKE_CHAT    — Send a chat message to a retake.tv stream
  *
  * Provider:
  *   ltcg-game-state — Injects board state into agent context
@@ -30,6 +36,7 @@
  *   GET /api/status — Plugin health and match state for monitoring
  *   GET /status — Legacy health endpoint alias for compatibility
  *   GET/POST /api/ltcg/autonomy/* — Autonomy control endpoints
+ *   GET /api/retake/status — retake.tv streaming status
  *
  * Events:
  *   ACTION_STARTED / ACTION_COMPLETED — Logs LTCG action activity
@@ -37,6 +44,7 @@
  */
 
 import { initClient } from "./client.js";
+import { initRetakeClient } from "./retake-client.js";
 import { gameStateProvider } from "./provider.js";
 import { startBattleAction, startBattleAliasAction } from "./actions/startBattle.js";
 import { startDuelAction, startDuelAliasAction } from "./actions/startDuel.js";
@@ -53,6 +61,12 @@ import {
   stopAutonomyAction,
   getAutonomyStatusAction,
 } from "./actions/autonomy.js";
+import { registerStreamAction } from "./actions/retake/registerStream.js";
+import { startRetakeStreamAction } from "./actions/retake/startStream.js";
+import { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
+import { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
+import { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
+import { sendChatAction } from "./actions/retake/sendChat.js";
 import { statusRoute, statusRouteLegacy } from "./routes/status.js";
 import {
   autonomyStatusRoute,
@@ -61,6 +75,7 @@ import {
   autonomyResumeRoute,
   autonomyStopRoute,
 } from "./routes/autonomy.js";
+import { retakeStatusRoute } from "./routes/retake.js";
 import { ltcgEvents } from "./events.js";
 import { getEnvValue } from "./env.js";
 import type { Plugin, IAgentRuntime } from "./types.js";
@@ -74,6 +89,8 @@ const plugin: Plugin = {
     LTCG_API_URL: getEnvValue("LTCG_API_URL"),
     LTCG_API_KEY: getEnvValue("LTCG_API_KEY"),
     LTCG_SOUNDTRACK_API_URL: getEnvValue("LTCG_SOUNDTRACK_API_URL"),
+    RETAKE_API_URL: getEnvValue("RETAKE_API_URL"),
+    RETAKE_AGENT_TOKEN: getEnvValue("RETAKE_AGENT_TOKEN"),
   },
 
   async init(config: Record<string, string>, _runtime: IAgentRuntime) {
@@ -112,6 +129,19 @@ const plugin: Plugin = {
     } catch {
       // Ignore if no active match endpoint is reachable (initial startup or transient error).
     }
+
+    // retake.tv streaming (optional)
+    const retakeApiUrl =
+      config.RETAKE_API_URL || getEnvValue("RETAKE_API_URL") || "";
+    const retakeToken =
+      config.RETAKE_AGENT_TOKEN || getEnvValue("RETAKE_AGENT_TOKEN") || "";
+
+    if (retakeApiUrl) {
+      initRetakeClient(retakeApiUrl, retakeToken);
+      console.log(`[LTCG] retake.tv streaming configured (${retakeApiUrl})`);
+    } else {
+      console.log("[LTCG] retake.tv streaming not configured (RETAKE_API_URL not set)");
+    }
   },
 
   providers: [gameStateProvider],
@@ -132,6 +162,12 @@ const plugin: Plugin = {
     getStatusAction,
     surrenderAction,
     getSoundtrackAction,
+    registerStreamAction,
+    startRetakeStreamAction,
+    stopRetakeStreamAction,
+    checkRetakeStatusAction,
+    getRtmpCredentialsAction,
+    sendChatAction,
   ],
 
   routes: [
@@ -142,6 +178,7 @@ const plugin: Plugin = {
     autonomyPauseRoute,
     autonomyResumeRoute,
     autonomyStopRoute,
+    retakeStatusRoute,
   ],
 
   events: ltcgEvents,
@@ -178,6 +215,14 @@ export {
 } from "./routes/autonomy.js";
 export { ltcgEvents } from "./events.js";
 export { getAutonomyController } from "./autonomy/controller.js";
+export { RetakeClient, initRetakeClient, getRetakeClient } from "./retake-client.js";
+export { registerStreamAction } from "./actions/retake/registerStream.js";
+export { startRetakeStreamAction } from "./actions/retake/startStream.js";
+export { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
+export { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
+export { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
+export { sendChatAction } from "./actions/retake/sendChat.js";
+export { retakeStatusRoute } from "./routes/retake.js";
 export type {
   AgentInfo,
   BoardCard,

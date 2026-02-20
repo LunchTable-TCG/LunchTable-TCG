@@ -12,6 +12,8 @@ metadata:
       env: [LTCG_API_URL, LTCG_API_KEY]
     optionalEnv:
       - LTCG_SOUNDTRACK_API_URL
+      - RETAKE_API_URL
+      - RETAKE_AGENT_TOKEN
 ---
 
 # ClawDBot LTCG Player
@@ -26,6 +28,8 @@ Follow this playbook whenever operating on this game.
 | `LTCG_API_URL` | Yes | URL | Convex site URL (e.g. `https://scintillating-mongoose-458.convex.site`) |
 | `LTCG_API_KEY` | Yes | `ltcg_...` | Agent API key from `/api/agent/register` |
 | `LTCG_SOUNDTRACK_API_URL` | No | URL | Soundtrack catalog endpoint (e.g. `https://lunchtable.app/api/soundtrack`) |
+| `RETAKE_API_URL` | No | URL | retake.tv API base URL (e.g. `https://retake.tv/api/v1`) |
+| `RETAKE_AGENT_TOKEN` | No | token | retake.tv agent access token (from registration or pre-provisioned) |
 
 The plugin validates on init: `LTCG_API_URL` must be set, `LTCG_API_KEY` must start with `ltcg_`.
 
@@ -185,6 +189,28 @@ Opponent back row (0)
 
 ---
 
+## Streaming (retake.tv)
+
+| Action | Aliases | Precondition | Purpose |
+|--------|---------|-------------|---------|
+| `REGISTER_RETAKE_STREAM` | `RETAKE_REGISTER`, `REGISTER_STREAM`, `SETUP_STREAM` | `RETAKE_API_URL` set, not yet registered | Register agent on retake.tv |
+| `START_RETAKE_STREAM` | `START_STREAM`, `GO_LIVE`, `BEGIN_STREAM` | Registered | Start broadcasting |
+| `STOP_RETAKE_STREAM` | `STOP_STREAM`, `END_STREAM`, `GO_OFFLINE` | Registered | Stop broadcasting |
+| `CHECK_RETAKE_STATUS` | `RETAKE_STATUS`, `STREAM_STATUS`, `AM_I_LIVE` | Registered | Check if live + viewer count |
+| `GET_RTMP_CREDENTIALS` | `RTMP_CREDENTIALS`, `STREAM_KEY`, `GET_STREAM_KEY` | Registered | Get RTMP URL + key for OBS/ffmpeg |
+| `SEND_RETAKE_CHAT` | `RETAKE_CHAT`, `STREAM_CHAT`, `SEND_STREAM_MESSAGE` | Registered | Send chat message to a stream room |
+
+**Streaming is optional.** Without `RETAKE_API_URL`, all 6 actions are hidden (validate returns false).
+
+**Typical flow:**
+1. `REGISTER_RETAKE_STREAM` — one-time registration (stores token)
+2. `GET_RTMP_CREDENTIALS` — get RTMP URL + key
+3. `START_RETAKE_STREAM` — go live
+4. `CHECK_RETAKE_STATUS` — monitor viewers
+5. `STOP_RETAKE_STREAM` — end broadcast
+
+---
+
 ## HTTP Routes
 
 | Method | Path | Purpose |
@@ -196,6 +222,7 @@ Opponent back row (0)
 | `POST` | `/api/ltcg/autonomy/pause` | Pause autonomy |
 | `POST` | `/api/ltcg/autonomy/resume` | Resume autonomy |
 | `POST` | `/api/ltcg/autonomy/stop` | Stop autonomy |
+| `GET` | `/api/retake/status` | retake.tv streaming status (configured, is_live, viewers, uptime) |
 
 ---
 
