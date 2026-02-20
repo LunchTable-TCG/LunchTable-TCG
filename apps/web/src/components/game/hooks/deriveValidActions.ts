@@ -6,8 +6,10 @@ export type ValidActions = {
   canSetSpellTrap: Set<string>;
   canActivateSpell: Set<string>;
   canActivateTrap: Set<string>;
+  canActivateEffect: Map<string, number[]>;
   canAttack: Map<string, string[]>;
   canFlipSummon: Set<string>;
+  canChangePosition: Set<string>;
 };
 
 const MAX_BOARD_SLOTS = 3;
@@ -30,19 +32,62 @@ export function deriveValidActions(params: {
     canSetSpellTrap: new Set(),
     canActivateSpell: new Set(),
     canActivateTrap: new Set(),
+    canActivateEffect: new Map(),
     canAttack: new Map(),
     canFlipSummon: new Set(),
+    canChangePosition: new Set(),
   };
 
   if (!view || gameOver) return va;
-  if (isChainWindow && !isChainResponder) return va;
-  if (!isChainWindow && !isMyTurn) return va;
 
-  const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
   const board = view.board ?? [];
   const hand = view.hand ?? [];
   const stZone = view.spellTrapZone ?? [];
   const opponentBoard = view.opponentBoard ?? [];
+  const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
+
+  // ── During chain window, only the responder can act ──
+  if (isChainWindow) {
+    if (!isChainResponder) return va;
+
+    // Chain responder can activate set traps and quick-play spells
+    for (const stCard of stZone) {
+      if (!stCard.faceDown) continue;
+      const card = cardLookup[stCard.definitionId];
+      if (!card) continue;
+      if (card.type === "trap" || card.cardType === "trap") {
+        va.canActivateTrap.add(stCard.cardId);
+      }
+      if (
+        (card.type === "spell" || card.cardType === "spell") &&
+        (card.spellType === "quick-play")
+      ) {
+        va.canActivateSpell.add(stCard.cardId);
+      }
+    }
+    return va;
+  }
+
+  // ── During opponent's turn (no chain), check for set traps ──
+  if (!isMyTurn) {
+    for (const stCard of stZone) {
+      if (!stCard.faceDown) continue;
+      const card = cardLookup[stCard.definitionId];
+      if (!card) continue;
+      if (card.type === "trap" || card.cardType === "trap") {
+        va.canActivateTrap.add(stCard.cardId);
+      }
+      if (
+        (card.type === "spell" || card.cardType === "spell") &&
+        (card.spellType === "quick-play")
+      ) {
+        va.canActivateSpell.add(stCard.cardId);
+      }
+    }
+    return va;
+  }
+
+  // ── It's the player's turn ──
   const maxBoardSlots = view.maxBoardSlots ?? MAX_BOARD_SLOTS;
   const maxSpellTrapSlots = view.maxSpellTrapSlots ?? MAX_SPELL_TRAP_SLOTS;
   const alreadyNormalSummoned = view.normalSummonedThisTurn === true;
@@ -98,6 +143,33 @@ export function deriveValidActions(params: {
     for (const boardCard of board) {
       if (boardCard.faceDown && (boardCard.turnSummoned ?? 0) < view.turnNumber) {
         va.canFlipSummon.add(boardCard.cardId);
+      }
+      // Face-up monsters that haven't changed position this turn and weren't summoned this turn
+      if (
+        !boardCard.faceDown &&
+        !boardCard.changedPositionThisTurn &&
+        (boardCard.turnSummoned ?? view.turnNumber) < view.turnNumber
+      ) {
+        va.canChangePosition.add(boardCard.cardId);
+      }
+    }
+
+    // ACTIVATE_EFFECT: face-up monsters with ignition effects
+    for (const boardCard of board) {
+      if (boardCard.faceDown) continue;
+      const card = cardLookup[boardCard.definitionId];
+      if (!card?.effects) continue;
+
+      const activatableIndices: number[] = [];
+      for (let i = 0; i < card.effects.length; i++) {
+        const eff = card.effects[i];
+        if (eff && eff.type === "ignition") {
+          activatableIndices.push(i);
+        }
+      }
+
+      if (activatableIndices.length > 0) {
+        va.canActivateEffect.set(boardCard.cardId, activatableIndices);
       }
     }
   }

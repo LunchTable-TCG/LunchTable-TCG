@@ -649,6 +649,25 @@ export default defineSchema(
       .index("by_status", ["status"])
       .index("by_status_rating", ["status", "rating"]),
 
+    // Stream chat — agent messages displayed on stream overlay + spectator views.
+    // Written by the agent plugin via HTTP API; subscribed to by the frontend overlay.
+    streamMessages: defineTable({
+      agentId: v.id("agents"),
+      role: v.union(v.literal("agent"), v.literal("viewer"), v.literal("system")),
+      senderName: v.string(),
+      text: v.string(),
+      source: v.union(
+        v.literal("retake"),
+        v.literal("telegram"),
+        v.literal("discord"),
+        v.literal("system"),
+        v.literal("other"),
+      ),
+      createdAt: v.number(),
+    })
+      .index("by_agent", ["agentId"])
+      .index("by_agent_created", ["agentId", "createdAt"]),
+
     // Agent telemetry — per-agent win/loss and match statistics
     agentStats: defineTable({
       agentId: v.id("agents"),

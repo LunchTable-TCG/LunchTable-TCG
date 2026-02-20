@@ -13,8 +13,18 @@ import {
   type Stage,
 } from "@/components/story";
 import { TrayNav } from "@/components/layout/TrayNav";
+import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { STAGES_BG, QUESTIONS_LABEL } from "@/lib/blobUrls";
 import { normalizeMatchId } from "@/lib/matchIds";
+
+const stagePanelVariant = {
+  hidden: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
+  visible: {
+    opacity: 1,
+    clipPath: "inset(0 0% 0 0)",
+    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const },
+  },
+};
 
 type StarterDeck = {
   deckCode: string;
@@ -199,27 +209,32 @@ function StoryChapterInner() {
     >
       <div className="absolute inset-0 bg-[#fdfdfb]/80" />
       <header className="relative z-10 border-b-2 border-[#121212] px-6 py-5">
-        <button
+        <motion.button
           type="button"
           onClick={() => navigate("/story")}
           className="text-xs font-bold uppercase tracking-wider text-[#666] hover:text-[#121212] transition-colors mb-2 block text-center"
           style={{ fontFamily: "Special Elite, cursive" }}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
         >
           &larr; Back to homework
-        </button>
-        <img
+        </motion.button>
+        <motion.img
           src={QUESTIONS_LABEL}
           alt="QUESTIONS"
           className="h-28 md:h-36 mx-auto"
           draggable={false}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
         />
       </header>
 
       {/* Comic page */}
       <div className="relative z-10 p-4 md:p-6 max-w-3xl mx-auto">
         {!stages ? (
-          <div className="flex justify-center py-20">
-            <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin" />
+          <div className="py-8">
+            <SkeletonGrid count={4} columns="grid-cols-2" />
           </div>
         ) : sorted.length === 0 ? (
           <div className="paper-panel p-12 text-center">
@@ -249,23 +264,35 @@ function StoryChapterInner() {
 
             // First panel spans full width + taller, rest split bottom row
             return (
-              <div
+              <motion.div
                 key={stage._id}
-                className={
+                variants={stagePanelVariant}
+                className={`relative ${
                   isHero
                     ? "col-span-2 h-[280px] md:h-[340px]"
                     : "col-span-1 h-[200px] md:h-[260px]"
-                }
+                }`}
               >
-                <StagePanel
-                  stage={stage}
-                  isStarting={starting === stage.stageNumber}
-                  onFight={() => handleStartBattle(stage)}
-                  onHostAgentFight={() => handleStartBattleForAgent(stage)}
-                  chapterId={chapterId}
-                  locked={locked}
-                />
-              </div>
+                {locked && (
+                  <div
+                    className="absolute inset-0 z-10 pointer-events-none"
+                    style={{
+                      background: `repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(18,18,18,0.08) 3px, rgba(18,18,18,0.08) 4px),
+                                   repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(18,18,18,0.08) 3px, rgba(18,18,18,0.08) 4px)`,
+                    }}
+                  />
+                )}
+                <div className={`h-full ${!locked ? "end-turn-glow" : ""}`}>
+                  <StagePanel
+                    stage={stage}
+                    isStarting={starting === stage.stageNumber}
+                    onFight={() => handleStartBattle(stage)}
+                    onHostAgentFight={() => handleStartBattleForAgent(stage)}
+                    chapterId={chapterId}
+                    locked={locked}
+                  />
+                </div>
+              </motion.div>
             );
           })}
         </motion.div>

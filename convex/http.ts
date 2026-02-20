@@ -763,6 +763,43 @@ corsRoute({
 	},
 });
 
+// ── Agent Stream Chat ────────────────────────────────────────
+
+corsRoute({
+	path: "/api/agent/stream/chat",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const body = (await request.json()) as Record<string, any>;
+		const { text, role, senderName, source } = body;
+
+		if (!text || typeof text !== "string" || text.trim().length === 0) {
+			return errorResponse("text is required.");
+		}
+
+		const validRoles = ["agent", "viewer", "system"];
+		const validSources = ["retake", "telegram", "discord", "system", "other"];
+		const resolvedRole = validRoles.includes(role) ? role : "agent";
+		const resolvedSource = validSources.includes(source) ? source : "other";
+		const resolvedSenderName =
+			typeof senderName === "string" && senderName.trim().length > 0
+				? senderName.trim()
+				: agent.name;
+
+		const messageId = await ctx.runMutation(internal.streamChat.postStreamMessage, {
+			agentId: agent._id,
+			role: resolvedRole,
+			senderName: resolvedSenderName,
+			text: text.trim().slice(0, 2000),
+			source: resolvedSource,
+		});
+
+		return jsonResponse({ messageId, ok: true });
+	},
+});
+
 // ── Agent Daily Briefing ─────────────────────────────────────
 
 corsRoute({

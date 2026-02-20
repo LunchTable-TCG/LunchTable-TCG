@@ -1,0 +1,39 @@
+{
+  "id": "ltcg",
+  "name": "LunchTable TCG Plugin",
+  "description": "ElizaOS plugin enabling AI agents to play LunchTable Trading Card Game",
+  "version": "0.1.0",
+  "kind": "plugin",
+  "requiredSecrets": ["LTCG_API_URL", "LTCG_API_KEY"],
+  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "LTCG_API_URL": {
+        "type": "string",
+        "description": "Convex site URL"
+      },
+      "LTCG_API_KEY": {
+        "type": "string",
+        "description": "Agent API key (starts with ltcg_)"
+      },
+      "LTCG_SOUNDTRACK_API_URL": {
+        "type": "string",
+        "description": "Optional soundtrack endpoint"
+      },
+      "RETAKE_API_URL": {
+        "type": "string",
+        "description": "retake.tv API base URL (e.g. https://retake.tv/api/v1)"
+      },
+      "RETAKE_AGENT_TOKEN": {
+        "type": "string",
+        "description": "retake.tv agent access token (from registration)"
+      },
+      "RETAKE_GAME_URL": {
+        "type": "string",
+        "description": "Game frontend URL for video pipeline (e.g. http://localhost:3334)"
+      }
+    },
+    "required": ["LTCG_API_URL", "LTCG_API_KEY"]
+  }
+}

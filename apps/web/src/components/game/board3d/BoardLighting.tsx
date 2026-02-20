@@ -14,7 +14,7 @@ interface BoardLightingProps {
 export function BoardLighting({ phase }: BoardLightingProps) {
   const isCombat = phase === "combat";
   const mainColor = isCombat ? "#ffe0d0" : "#ffffff";
-  const ambientIntensity = isCombat ? 0.35 : 0.4;
+  const ambientIntensity = isCombat ? 0.6 : 0.7;
 
   return (
     <>

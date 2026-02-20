@@ -12,17 +12,14 @@ const ARCHETYPE_HEX: Record<string, string> = {
   gray: "#9ca3af",
 };
 
-// Per-archetype art gradients for the card art area
+// Per-archetype art gradients for the card art area (no-art fallback)
 const ARCHETYPE_ART_GRADIENT: Record<string, string> = {
-  red: "linear-gradient(135deg, #0d0604 0%, #1a0a06 40%, #4a0e0e 70%, #ef444430 100%)",
-  blue: "radial-gradient(ellipse at 60% 40%, #0f1a2e 0%, #0a0d14 50%, #1b3a6b 80%, #3b82f620 100%)",
-  yellow:
-    "linear-gradient(120deg, #0f0e07 0%, #1c1800 40%, #3d3000 70%, #eab30820 100%), repeating-linear-gradient(45deg, transparent 0px, transparent 6px, #eab30808 6px, #eab30808 7px)",
-  purple:
-    "radial-gradient(ellipse at 30% 70%, #1a0d24 0%, #0d0714 50%, #3b1060 80%, #a855f720 100%)",
-  green:
-    "linear-gradient(160deg, #050f07 0%, #0a1a0c 40%, #0d2e14 70%, #22c55e18 100%), repeating-linear-gradient(90deg, transparent 0px, transparent 8px, #22c55e06 8px, #22c55e06 9px)",
-  gray: "radial-gradient(ellipse at 50% 30%, #16161a 0%, #0d0d10 50%, #252530 80%, #9ca3af15 100%)",
+  red: "radial-gradient(ellipse at 50% 40%, #4a0e0e 0%, #2d0808 40%, #1a0604 70%, #0d0604 100%)",
+  blue: "radial-gradient(ellipse at 60% 40%, #1b3a6b 0%, #132952 40%, #0f1a2e 70%, #0a0d14 100%)",
+  yellow: "radial-gradient(ellipse at 50% 40%, #5c4a00 0%, #3d3000 40%, #1c1800 70%, #0f0e07 100%)",
+  purple: "radial-gradient(ellipse at 40% 50%, #5b1a80 0%, #3b1060 40%, #1a0d24 70%, #0d0714 100%)",
+  green: "radial-gradient(ellipse at 50% 40%, #1a5c2a 0%, #0d3e18 40%, #0a1a0c 70%, #050f07 100%)",
+  gray: "radial-gradient(ellipse at 50% 40%, #3a3a44 0%, #252530 40%, #16161a 70%, #0d0d10 100%)",
 };
 
 interface HandCardProps {
@@ -80,6 +77,8 @@ export function HandCard({
   const shortEffect =
     cardDef?.shortEffect ||
     cardDef?.effect?.slice(0, 40) ||
+    cardDef?.effects?.[0]?.description?.slice(0, 40) ||
+    cardDef?.flavorText?.slice(0, 40) ||
     (cardType === "spell" ? "Activate for an effect." : "Trigger when conditions are met.");
 
   const { tiltStyle, onMouseMove, onMouseLeave } = useCardTilt({ maxTilt: 8 });

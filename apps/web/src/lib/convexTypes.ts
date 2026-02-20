@@ -111,6 +111,32 @@ export type StoryCompletionResult = {
   };
 };
 
+export type EffectAction = {
+  type: string;
+  amount?: number;
+  count?: number;
+  target?: string;
+  duration?: string;
+  from?: string;
+};
+
+export type EffectDefinition = {
+  id: string;
+  type: "ignition" | "trigger" | "quick" | "continuous" | "flip" | "on_summon";
+  description: string;
+  actions: EffectAction[];
+  cost?: { type: string; count?: number };
+  targetCount?: number;
+  targetFilter?: {
+    owner?: "self" | "opponent" | "any";
+    zone?: string;
+    cardType?: string;
+    attribute?: string;
+  };
+  oncePerTurn?: boolean;
+  hardOncePerTurn?: boolean;
+};
+
 export type CardDefinition = {
   _id: string;
   name: string;
@@ -119,6 +145,24 @@ export type CardDefinition = {
   attack?: number;
   defense?: number;
   level?: number;
+  archetype?: string;
+  rarity?: string;
+  attribute?: string;
+  spellType?: string;
+  trapType?: string;
+  flavorText?: string;
+  imageUrl?: string;
+  cost?: number;
+  viceType?: string;
+  ability?: Array<{
+    trigger: string;
+    speed: number | string;
+    targets: string[];
+    operations: string[];
+  }>;
+  effects?: EffectDefinition[];
+  effect?: string;
+  shortEffect?: string;
 };
 
 export type GameCardInstance = {

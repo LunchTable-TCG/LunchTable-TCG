@@ -2,7 +2,7 @@
 import { expect, test, describe } from "vitest";
 import { ConvexError } from "convex/values";
 import { api } from "../_generated/api";
-import { setupTestConvex, seedUser, ALICE, BOB } from "./setup";
+import { setupTestConvex, seedUser, ALICE, BOB } from "./setup.test-helpers";
 
 // ═══════════════════════════════════════════════════════════════════════
 // auth.ts integration tests

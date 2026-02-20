@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { expect, test, describe } from "vitest";
 import { api } from "../_generated/api";
-import { setupTestConvex, seedUser, ALICE, BOB } from "./setup";
+import { setupTestConvex, seedUser, ALICE, BOB } from "./setup.test-helpers";
 
 // ═══════════════════════════════════════════════════════════════════════
 // rematch.ts integration tests

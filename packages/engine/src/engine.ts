@@ -524,6 +524,14 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
           cardId: setCard.cardId,
         });
       }
+
+      // Set traps can be activated during opponent's turn
+      if (setDef.type === "trap") {
+        opponentTurnMoves.push({
+          type: "ACTIVATE_TRAP",
+          cardId: setCard.cardId,
+        });
+      }
     }
 
     return opponentTurnMoves;
@@ -785,6 +793,26 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
         cardId: setCard.cardId,
       });
     }
+
+    // ACTIVATE_EFFECT moves (face-up monsters with ignition effects)
+    for (const boardCard of board) {
+      if (boardCard.faceDown) continue;
+      const cardDef = state.cardLookup[boardCard.definitionId];
+      if (!cardDef?.effects) continue;
+
+      for (let i = 0; i < cardDef.effects.length; i++) {
+        const eff = cardDef.effects[i];
+        if (eff.type !== "ignition") continue;
+        if (!canActivateEffect(state, eff, seat, boardCard.cardId)) continue;
+        if (!hasValidTargets(state, eff, seat)) continue;
+
+        moves.push({
+          type: "ACTIVATE_EFFECT",
+          cardId: boardCard.cardId,
+          effectIndex: i,
+        });
+      }
+    }
   }
 
   // Combat phase moves
@@ -841,6 +869,14 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
         const cardDef = state.cardLookup[setCard.definitionId];
         if (!cardDef || cardDef.type !== "spell" || cardDef.spellType !== "quick-play") return [];
         // Allowed — fall through to ACTIVATE_SPELL handler
+      } else if (command.type === "ACTIVATE_TRAP") {
+        // Allow set trap activation during opponent's turn
+        const playerSpellTrapZone = seat === "host" ? state.hostSpellTrapZone : state.awaySpellTrapZone;
+        const setCard = playerSpellTrapZone.find((c) => c.cardId === command.cardId);
+        if (!setCard || !setCard.faceDown) return [];
+        const cardDef = state.cardLookup[setCard.definitionId];
+        if (!cardDef || cardDef.type !== "trap") return [];
+        // Allowed — fall through to ACTIVATE_TRAP handler
       } else {
         return [];
       }
@@ -959,8 +995,8 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       if (!boardCard) break;
       if (boardCard.faceDown) break;
 
-      // Get card definition
-      const cardDef = state.cardLookup[cardId];
+      // Get card definition (use definitionId for consistency with other board card lookups)
+      const cardDef = state.cardLookup[boardCard.definitionId];
       if (!cardDef || !cardDef.effects || effectIndex < 0 || effectIndex >= cardDef.effects.length) break;
 
       const effectDef = expectDefined(

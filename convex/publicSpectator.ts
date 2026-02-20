@@ -60,6 +60,7 @@ export type PublicSpectatorSlot = {
   attack: number | null;
   defense: number | null;
   kind: "monster" | "spell" | "trap" | "card" | null;
+  definitionId: string | null;
 };
 
 export type PublicSpectatorView = {
@@ -155,6 +156,7 @@ function toBoardSlots(
         attack: null,
         defense: null,
         kind: null,
+        definitionId: null,
       });
       continue;
     }
@@ -177,6 +179,7 @@ function toBoardSlots(
       attack: isMonster ? toNumberValue(definition?.attack, 0) : null,
       defense: isMonster ? toNumberValue(definition?.defense, 0) : null,
       kind: isMonster ? "monster" : faceDown ? "card" : "card",
+      definitionId: faceDown ? null : definitionId,
     });
   }
 
@@ -202,6 +205,7 @@ function toSpellTrapSlots(
         attack: null,
         defense: null,
         kind: null,
+        definitionId: null,
       });
       continue;
     }
@@ -223,6 +227,7 @@ function toSpellTrapSlots(
       attack: null,
       defense: null,
       kind,
+      definitionId: faceDown ? null : definitionId,
     });
   }
 

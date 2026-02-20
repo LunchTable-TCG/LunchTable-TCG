@@ -78,7 +78,7 @@ export const joinRankedQueue = mutation({
       });
 
       // Create the actual match via internal mutation
-      await ctx.runMutation(internal.matchmaking.createRankedMatch, {
+      await ctx.runMutation((internal as any).matchmaking.createRankedMatch, {
         hostUserId: user._id as any,
         awayUserId: matchPartner.userId as any,
         hostDeckId: args.deckId,

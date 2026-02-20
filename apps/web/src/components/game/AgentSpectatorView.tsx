@@ -2,11 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useAgentSpectator,
   type PublicEventLogEntry,
-  type PublicSpectatorSlot,
   type PublicSpectatorView,
 } from "@/hooks/useAgentSpectator";
 import type { IframeChatState } from "@/hooks/useIframeMode";
 import type { IframeChatMessage } from "@/lib/iframe";
+import type { CardDefinition } from "@/lib/convexTypes";
+import type { Phase } from "@/components/game/types";
+import { useCardLookup } from "@/hooks/useCardLookup";
+import { FieldRow } from "@/components/game/FieldRow";
+import { SpellTrapRow } from "@/components/game/SpellTrapRow";
+import { LPBar } from "@/components/game/LPBar";
+import { PhaseBar } from "@/components/game/PhaseBar";
+import {
+  spectatorMonstersToBoardCards,
+  spectatorSpellTrapsToCards,
+} from "@/lib/spectatorAdapter";
 
 interface Props {
   apiKey: string;
@@ -31,6 +41,9 @@ export function AgentSpectatorView({
   onSendChat,
 }: Props) {
   const { agent, matchState, timeline, error, loading } = useAgentSpectator(apiKey, apiUrl);
+
+  const { lookup: cardLookup } = useCardLookup();
+
   const [chatMessages, setChatMessages] = useState<IframeChatMessage[]>([]);
   const [draft, setDraft] = useState("");
 
@@ -183,7 +196,7 @@ export function AgentSpectatorView({
         <section className="paper-panel p-3 col-span-1 xl:col-span-2">
           <p className="text-[11px] uppercase tracking-wider text-[#666] mb-2">Public Game Board</p>
           {matchState ? (
-            <PublicBoard state={matchState} />
+            <RichPublicBoard state={matchState} cardLookup={cardLookup} agentName={agent.name} />
           ) : (
             <p className="text-xs text-[#666]">Waiting for an active match...</p>
           )}
@@ -198,64 +211,82 @@ export function AgentSpectatorView({
   );
 }
 
-function PublicBoard({ state }: { state: PublicSpectatorView }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3 text-[11px]">
-        <Stat label="Phase" value={state.phase} />
-        <Stat label="Turn" value={String(state.turnNumber)} />
-        <Stat label="Agent Turn" value={state.isAgentTurn ? "Yes" : "No"} />
-        <Stat label="Status" value={state.status ?? "unknown"} />
-      </div>
+const MAX_LP = 4000;
+const boardNoop = () => {};
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="border border-[#121212]/30 bg-white/70 p-2">
-          <p className="font-bold mb-1">Agent</p>
-          <p>LP: {state.players.agent.lifePoints}</p>
-          <p>Hand: {state.players.agent.handCount}</p>
-          <p>Deck: {state.players.agent.deckCount}</p>
-          <p>GY/BAN: {state.players.agent.graveyardCount}/{state.players.agent.banishedCount}</p>
-        </div>
-        <div className="border border-[#121212]/30 bg-white/70 p-2">
-          <p className="font-bold mb-1">Opponent</p>
-          <p>LP: {state.players.opponent.lifePoints}</p>
-          <p>Hand: {state.players.opponent.handCount}</p>
-          <p>Deck: {state.players.opponent.deckCount}</p>
-          <p>GY/BAN: {state.players.opponent.graveyardCount}/{state.players.opponent.banishedCount}</p>
-        </div>
-      </div>
-
-      <FieldPanel label="Opponent Monsters" slots={state.fields.opponent.monsters} />
-      <FieldPanel label="Opponent Backrow" slots={state.fields.opponent.spellTraps} />
-      <FieldPanel label="Agent Monsters" slots={state.fields.agent.monsters} />
-      <FieldPanel label="Agent Backrow" slots={state.fields.agent.spellTraps} />
-    </div>
+function RichPublicBoard({
+  state,
+  cardLookup,
+  agentName,
+}: {
+  state: PublicSpectatorView;
+  cardLookup: Record<string, CardDefinition>;
+  agentName: string;
+}) {
+  const phase = (state.phase ?? "draw") as Phase;
+  const agentMonsters = useMemo(
+    () => spectatorMonstersToBoardCards(state.fields.agent.monsters),
+    [state.fields.agent.monsters],
   );
-}
+  const opponentMonsters = useMemo(
+    () => spectatorMonstersToBoardCards(state.fields.opponent.monsters),
+    [state.fields.opponent.monsters],
+  );
+  const agentST = useMemo(
+    () => spectatorSpellTrapsToCards(state.fields.agent.spellTraps),
+    [state.fields.agent.spellTraps],
+  );
+  const opponentST = useMemo(
+    () => spectatorSpellTrapsToCards(state.fields.opponent.spellTraps),
+    [state.fields.opponent.spellTraps],
+  );
 
-function FieldPanel({ label, slots }: { label: string; slots: PublicSpectatorSlot[] }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">{label}</p>
-      <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5">
-        {slots.map((slot) => (
-          <div key={`${label}-${slot.lane}`} className="border border-[#121212]/30 bg-white/70 p-1.5 min-h-14">
-            {!slot.occupied ? (
-              <p className="text-[10px] text-[#aaa]">Empty</p>
-            ) : slot.faceDown ? (
-              <p className="text-[10px] text-[#666]">Face-down</p>
-            ) : (
-              <>
-                <p className="text-[10px] font-bold leading-tight line-clamp-2">{slot.name ?? "Card"}</p>
-                {slot.attack !== null && slot.defense !== null && (
-                  <p className="text-[9px] text-[#666] mt-0.5">
-                    {slot.attack}/{slot.defense}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        ))}
+    <div className="bg-[#0d0c0a] rounded-sm p-3 space-y-2">
+      {/* LP bars */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <LPBar
+            lp={state.players.agent.lifePoints}
+            maxLp={MAX_LP}
+            label={agentName}
+            side="player"
+            platformTag="AI"
+          />
+        </div>
+        <span className="font-['Outfit'] font-black text-white/30 text-[10px] uppercase">
+          T{state.turnNumber}
+        </span>
+        <div className="flex-1">
+          <LPBar
+            lp={state.players.opponent.lifePoints}
+            maxLp={MAX_LP}
+            label="OPPONENT"
+            side="opponent"
+          />
+        </div>
+      </div>
+
+      {/* Phase bar */}
+      <PhaseBar currentPhase={phase} isMyTurn={false} onAdvance={boardNoop} />
+
+      {/* Board fields */}
+      <div className="space-y-1.5">
+        <SpellTrapRow cards={opponentST} cardLookup={cardLookup} maxSlots={3} interactive={false} />
+        <FieldRow cards={opponentMonsters} cardLookup={cardLookup} maxSlots={3} reversed />
+        <div className="flex items-center gap-2 py-0.5">
+          <div className="flex-1 h-px bg-white/10" />
+          <span className="font-['Special_Elite'] text-white/15 text-[9px]">vs</span>
+          <div className="flex-1 h-px bg-white/10" />
+        </div>
+        <FieldRow cards={agentMonsters} cardLookup={cardLookup} maxSlots={3} />
+        <SpellTrapRow cards={agentST} cardLookup={cardLookup} maxSlots={3} interactive={false} />
+      </div>
+
+      {/* Compact zone stats */}
+      <div className="flex justify-between text-[9px] text-white/25 font-['Special_Elite'] px-1">
+        <span>Hand {state.players.agent.handCount} · Deck {state.players.agent.deckCount} · GY {state.players.agent.graveyardCount}</span>
+        <span>Hand {state.players.opponent.handCount} · Deck {state.players.opponent.deckCount} · GY {state.players.opponent.graveyardCount}</span>
       </div>
     </div>
   );
@@ -304,11 +335,3 @@ function SpectatorError({ message }: { message: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="px-2 py-1 border border-[#121212]/30 bg-white/70">
-      <p className="text-[9px] uppercase tracking-wider text-[#777]">{label}</p>
-      <p className="text-xs font-bold">{value}</p>
-    </div>
-  );
-}

@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router";
 import { motion } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useStory } from "./StoryProvider";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { SkeletonGrid } from "@/components/ui/Skeleton";
 
 import {
   STORY_BG,
@@ -74,6 +76,31 @@ export function ChapterMap() {
   const navigate = useNavigate();
   const { chapters, isLoading, isChapterComplete, isChapterUnlocked, totalStars } = useStory();
 
+  // Parallax scroll state
+  const [scrollY, setScrollY] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  useEffect(() => {
+    if (prefersReducedMotion) return;
+
+    const handleScroll = () => {
+      if (rafRef.current !== null) return;
+      rafRef.current = requestAnimationFrame(() => {
+        setScrollY(window.scrollY);
+        rafRef.current = null;
+      });
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [prefersReducedMotion]);
+
   const sortedChapters = useMemo(() => {
     return [...(chapters ?? [])].sort((a, b) => {
       const actDiff = (a.actNumber ?? 0) - (b.actNumber ?? 0);
@@ -85,18 +112,31 @@ export function ChapterMap() {
   }, [chapters]);
 
   return (
-    <div
-      className="min-h-screen pb-24 relative bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: `url('${STORY_BG}')` }}
-    >
+    <div className="min-h-screen pb-24 relative overflow-hidden">
+      {/* Parallax background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `url('${STORY_BG}')`,
+          transform: prefersReducedMotion ? undefined : `translateY(${scrollY * 0.3}px)`,
+          willChange: "transform",
+          top: "-20%",
+          bottom: "-20%",
+        }}
+      />
       <div className="absolute inset-0 bg-[#fdfdfb]/85" />
+
       <header className="relative z-10 border-b-2 border-[#121212] px-6 py-5">
         <div className="text-center">
-          <img
+          {/* 5. Header entrance animation */}
+          <motion.img
             src={HOMEWORK_LABEL}
             alt="HOMEWORK"
             className="h-28 md:h-36 mx-auto"
             draggable={false}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", damping: 18, stiffness: 180 }}
           />
           <p
             className="text-sm text-[#666] mt-1"
@@ -104,22 +144,22 @@ export function ChapterMap() {
           >
             Fight your way through the halls
           </p>
+          {/* 2. Animated star counter */}
           {totalStars > 0 && (
             <p
               className="text-lg mt-1"
               style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900, color: "#ffcc00" }}
             >
-              &#9733; {totalStars}
+              &#9733; <AnimatedNumber value={totalStars} duration={800} delay={300} />
             </p>
           )}
         </div>
       </header>
 
       <div className="relative z-10 p-6 max-w-4xl mx-auto">
+        {/* 4. Skeleton loading state */}
         {isLoading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin" />
-          </div>
+          <SkeletonGrid count={6} columns="grid-cols-3" />
         ) : !chapters || chapters.length === 0 ? (
           <div className="paper-panel p-12 text-center">
             <p className="text-[#666] font-bold uppercase text-sm">
@@ -142,6 +182,7 @@ export function ChapterMap() {
             {sortedChapters.map((chapter, i) => {
               const completed = isChapterComplete(chapter._id);
               const locked = !completed && !isChapterUnlocked(chapter._id);
+              const unlocked = !completed && !locked;
               const layout = PANEL_LAYOUTS[i % PANEL_LAYOUTS.length];
               const rotation = ((i * 7 + 3) % 5) - 2;
 
@@ -169,16 +210,36 @@ export function ChapterMap() {
                     />
                   )}
 
-                  {/* Locked overlay */}
+                  {/* 3a. Locked overlay with crosshatch pattern */}
                   {locked && (
-                    <div className="absolute inset-0 bg-[#121212]/60 z-10 flex items-center justify-center">
-                      <span
-                        className="comic-stamp text-white/70 border-white/40 text-xs scale-110"
-                        style={{ transform: "rotate(-6deg) scale(1.1)" }}
-                      >
-                        LOCKED
-                      </span>
+                    <div className="absolute inset-0 z-10">
+                      {/* Crosshatch overlay */}
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          backgroundImage:
+                            "repeating-linear-gradient(45deg, rgba(18,18,18,0.18) 0px, rgba(18,18,18,0.18) 2px, transparent 2px, transparent 6px), repeating-linear-gradient(-45deg, rgba(18,18,18,0.18) 0px, rgba(18,18,18,0.18) 2px, transparent 2px, transparent 6px)",
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-[#121212]/60 flex items-center justify-center">
+                        <span
+                          className="comic-stamp text-white/70 border-white/40 text-xs scale-110"
+                          style={{ transform: "rotate(-6deg) scale(1.1)" }}
+                        >
+                          LOCKED
+                        </span>
+                      </div>
                     </div>
+                  )}
+
+                  {/* 3b. Gold flash for newly unlocked chapters */}
+                  {unlocked && (
+                    <motion.div
+                      className="absolute inset-0 z-10 pointer-events-none"
+                      initial={{ backgroundColor: "rgba(255,204,0,0.3)" }}
+                      animate={{ backgroundColor: "rgba(255,204,0,0)" }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                    />
                   )}
 
                   <div className={`relative z-20 flex flex-col justify-between h-full p-4 ${locked ? "opacity-40" : ""

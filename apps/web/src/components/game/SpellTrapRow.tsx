@@ -19,6 +19,7 @@ interface SpellTrapRowProps {
   maxSlots?: number;
   fieldSpell?: FieldSpell | null;
   interactive?: boolean;
+  highlightIds?: Set<string>;
   onSlotClick?: (cardId: string) => void;
 }
 
@@ -30,6 +31,7 @@ export function SpellTrapRow({
   maxSlots = 3,
   fieldSpell,
   interactive = false,
+  highlightIds,
   onSlotClick,
 }: SpellTrapRowProps) {
   const slots = Array.from({ length: maxSlots });
@@ -63,6 +65,7 @@ export function SpellTrapRow({
 
           const def = cardLookup[st.definitionId];
           const isClickable = interactive && !!onSlotClick;
+          const isHighlighted = highlightIds?.has(st.cardId);
 
           return (
             <motion.div
@@ -72,7 +75,11 @@ export function SpellTrapRow({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={isClickable ? () => onSlotClick!(st.cardId) : undefined}
-              title={st.faceDown ? "Set Card" : (def?.name ?? "S/T")}
+              title={st.faceDown ? (isHighlighted ? "Activate this card" : "Set Card") : (def?.name ?? "S/T")}
+              style={isHighlighted ? {
+                boxShadow: "0 0 8px rgba(255,204,0,0.5), inset 0 0 4px rgba(255,204,0,0.2)",
+                border: "1.5px solid #ffcc00",
+              } : undefined}
             >
               {st.faceDown ? (
                 <img
@@ -83,6 +90,18 @@ export function SpellTrapRow({
                 />
               ) : (
                 <span className="st-slot-label">{(def?.name ?? "S/T").slice(0, 8)}</span>
+              )}
+              {/* Activatable pulse overlay */}
+              {isHighlighted && st.faceDown && (
+                <motion.div
+                  className="absolute inset-0 pointer-events-none z-10"
+                  animate={{ opacity: [0.2, 0.5, 0.2] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                  style={{
+                    border: "1.5px solid #ffcc00",
+                    boxShadow: "inset 0 0 6px rgba(255,204,0,0.3)",
+                  }}
+                />
               )}
             </motion.div>
           );

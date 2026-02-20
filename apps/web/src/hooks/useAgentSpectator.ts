@@ -13,6 +13,7 @@ export type PublicSpectatorSlot = {
   attack: number | null;
   defense: number | null;
   kind: "monster" | "spell" | "trap" | "card" | null;
+  definitionId: string | null;
 };
 
 export type PublicSpectatorView = {

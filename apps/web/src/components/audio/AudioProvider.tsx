@@ -447,7 +447,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     currentQueueRef.current = queue;
 
     if (queue.length === 0) {
-      setPlaybackIntent("stopped");
+      // Don't persist "stopped" — just pause. When the user navigates to a
+      // route with tracks, their original intent ("playing") should resume.
       const audio = musicAudioRef.current;
       if (audio) {
         audio.pause();

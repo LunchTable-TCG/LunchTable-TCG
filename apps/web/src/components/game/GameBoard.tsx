@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { useGameState, type Seat } from "./hooks/useGameState";
 import { useGameActions } from "./hooks/useGameActions";
+import { useVisualEvents, useScreenShake } from "./hooks/useVisualEvents";
 import { useAudio } from "@/components/audio/AudioProvider";
 import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
 import { LPBar } from "./LPBar";
@@ -19,6 +20,7 @@ import { RematchOverlay } from "./RematchOverlay";
 import { FieldRow } from "./FieldRow";
 import { SpellTrapRow } from "./SpellTrapRow";
 import { GameMotionOverlay } from "./GameMotionOverlay";
+import { GameEffectsLayer } from "./GameEffectsLayer";
 import { PongOverlay } from "./pong/PongOverlay";
 import { GameLog } from "./GameLog";
 import { TurnBanner } from "./TurnBanner";
@@ -62,6 +64,68 @@ type SpellTrapLaneSnapshot = {
   faceDown?: boolean;
   activated?: boolean;
 };
+
+/**
+ * Build TargetCandidate[] from the current PlayerView based on an effect's targetFilter.
+ */
+function buildTargetCandidates(
+  view: any,
+  filter: { zone?: string; owner?: string; cardType?: string } | undefined,
+): TargetCandidate[] {
+  if (!view || !filter) return [];
+  const candidates: TargetCandidate[] = [];
+  const zone = filter.zone ?? "board";
+  const owner = filter.owner ?? "opponent";
+
+  const addFromZone = (
+    cards: any[],
+    ownerLabel: "player" | "opponent",
+    zoneLabel: "board" | "spellTrap" | "hand" | "graveyard",
+  ) => {
+    for (const card of cards) {
+      const id = card.cardId ?? card;
+      const defId = card.definitionId ?? id;
+      candidates.push({
+        cardId: id,
+        definitionId: defId,
+        owner: ownerLabel,
+        zone: zoneLabel,
+        faceDown: card.faceDown,
+        position: card.position,
+      });
+    }
+  };
+
+  if (zone === "board") {
+    if (owner === "opponent" || owner === "any") addFromZone(view.opponentBoard ?? [], "opponent", "board");
+    if (owner === "self" || owner === "any") addFromZone(view.board ?? [], "player", "board");
+  } else if (zone === "graveyard") {
+    if (owner === "opponent" || owner === "any") {
+      addFromZone(
+        (view.opponentGraveyard ?? []).map((id: string) => ({ cardId: id, definitionId: id })),
+        "opponent",
+        "graveyard",
+      );
+    }
+    if (owner === "self" || owner === "any") {
+      addFromZone(
+        (view.graveyard ?? []).map((id: string) => ({ cardId: id, definitionId: id })),
+        "player",
+        "graveyard",
+      );
+    }
+  } else if (zone === "hand") {
+    if (owner === "self" || owner === "any") {
+      addFromZone(
+        (view.hand ?? []).map((id: string) => ({ cardId: id, definitionId: id })),
+        "player",
+        "hand",
+      );
+    }
+  }
+
+  return candidates;
+}
 
 declare global {
   interface Window {
@@ -108,6 +172,12 @@ export function GameBoard({
     latestSnapshotVersion,
   } = useGameState(matchId, seat, actorUserId);
   const actions = useGameActions(matchId, seat, latestSnapshotVersion);
+  const vfx = useVisualEvents();
+  const playerLP = view?.lifePoints ?? 0;
+  const opponentLP = view?.opponentLifePoints ?? 0;
+  const isShaking = useScreenShake(playerLP);
+  const prevBoardRef = useRef<Set<string>>(new Set());
+  const prevOpponentBoardRef = useRef<Set<string>>(new Set());
   const endSfxPlayedRef = useRef(false);
   const matchEndNotifiedRef = useRef(false);
   const pendingMatchEndRef = useRef(onMatchEnd);
@@ -124,8 +194,6 @@ export function GameBoard({
   const maxBoardSlots = view?.maxBoardSlots ?? MAX_BOARD_SLOTS;
   const maxSpellTrapSlots = view?.maxSpellTrapSlots ?? MAX_SPELL_TRAP_SLOTS;
   const playerSeat = view?.mySeat;
-  const playerLP = view?.lifePoints ?? 0;
-  const opponentLP = view?.opponentLifePoints ?? 0;
   const winner = view?.winner ?? meta?.winner;
   const ended = gameOver || meta?.status === "ended";
   const result: "win" | "loss" | "draw" =
@@ -307,6 +375,15 @@ export function GameBoard({
   // Compute flip-summonable monster IDs for board highlighting
   const flipSummonIds = validActions.canFlipSummon;
 
+  // Compute effect-activatable monster IDs for board highlighting
+  const effectActivatableIds = new Set(validActions.canActivateEffect.keys());
+
+  // Compute activatable set spell/trap IDs for backrow highlighting
+  const activatableSTIds = new Set([
+    ...validActions.canActivateSpell,
+    ...validActions.canActivateTrap,
+  ]);
+
   // Click handlers
   const handleHandCardClick = useCallback(
     (cardId: string) => {
@@ -371,10 +448,36 @@ export function GameBoard({
   const handleActionSheetActivateSpell = useCallback(() => {
     if (isChainPromptOpen) return;
     if (!selectedHandCard) return;
+
+    // Check if this spell has effects that require targets
+    const def = cardLookup[selectedHandCard];
+    const spellName = def?.name ?? "Spell";
+    const effectDef = def?.effects?.[0];
+    if (effectDef?.targetFilter && (effectDef.targetCount ?? 0) > 0) {
+      const candidates = buildTargetCandidates(view, effectDef.targetFilter);
+      if (candidates.length > 0) {
+        const cardId = selectedHandCard;
+        setShowActionSheet(false);
+        setSelectedHandCard(null);
+        setTargetSelectorContext({
+          candidates,
+          targetCount: effectDef.targetCount ?? 1,
+          effectDescription: effectDef.description ?? def?.shortEffect ?? "Select a target",
+          callback: (targetIds: string[]) => {
+            vfx.push("spell_flash", { cardName: spellName });
+            actions.activateSpell(cardId, targetIds);
+          },
+        });
+        setShowTargetSelector(true);
+        return;
+      }
+    }
+
+    vfx.push("spell_flash", { cardName: spellName });
     actions.activateSpell(selectedHandCard);
     setSelectedHandCard(null);
     setShowActionSheet(false);
-  }, [isChainPromptOpen, selectedHandCard, actions]);
+  }, [isChainPromptOpen, selectedHandCard, actions, cardLookup, view, vfx]);
 
   const handleActionSheetClose = useCallback(() => {
     setSelectedHandCard(null);
@@ -389,12 +492,46 @@ export function GameBoard({
   const handleActivateEffect = useCallback(
     (effectIndex: number) => {
       if (isChainPromptOpen || !selectedBoardCard) return;
+
+      // Check if this effect needs targets
+      const boardCard = (view?.board ?? []).find((c: any) => c.cardId === selectedBoardCard);
+      const def = boardCard ? cardLookup[boardCard.definitionId] : null;
+      const effectName = def?.name ?? "Effect";
+      const effectDef = def?.effects?.[effectIndex];
+      if (effectDef?.targetFilter && (effectDef.targetCount ?? 0) > 0) {
+        const candidates = buildTargetCandidates(view, effectDef.targetFilter);
+        if (candidates.length > 0) {
+          const cardId = selectedBoardCard;
+          setShowBoardCardDetail(false);
+          setSelectedBoardCard(null);
+          setTargetSelectorContext({
+            candidates,
+            targetCount: effectDef.targetCount ?? 1,
+            effectDescription: effectDef.description ?? def?.shortEffect ?? "Select a target",
+            callback: (targetIds: string[]) => {
+              vfx.push("effect_burst", { cardName: effectName });
+              actions.activateEffect(cardId, effectIndex, targetIds);
+            },
+          });
+          setShowTargetSelector(true);
+          return;
+        }
+      }
+
+      vfx.push("effect_burst", { cardName: effectName });
       actions.activateEffect(selectedBoardCard, effectIndex);
       setSelectedBoardCard(null);
       setShowBoardCardDetail(false);
     },
-    [isChainPromptOpen, selectedBoardCard, actions],
+    [isChainPromptOpen, selectedBoardCard, actions, cardLookup, view, vfx],
   );
+
+  const handleChangePosition = useCallback(() => {
+    if (isChainPromptOpen || !selectedBoardCard) return;
+    actions.changePosition(selectedBoardCard);
+    setSelectedBoardCard(null);
+    setShowBoardCardDetail(false);
+  }, [isChainPromptOpen, selectedBoardCard, actions]);
 
   // TributeSelector callback (stubbed until TributeSelector exists)
   const handleTributeConfirm = useCallback(
@@ -409,16 +546,17 @@ export function GameBoard({
     [isChainPromptOpen, selectedHandCard, pendingSummonPosition, actions],
   );
 
-  // AttackTargetSelector callbacks (stubbed until AttackTargetSelector exists)
+  // AttackTargetSelector callbacks
   const handleAttackTarget = useCallback(
     (targetId?: string) => {
       if (isChainPromptOpen) return;
       if (!selectedBoardCard) return;
+      vfx.push("attack_slash", undefined, 800);
       actions.declareAttack(selectedBoardCard, targetId);
       setSelectedBoardCard(null);
       setShowAttackTargets(false);
     },
-    [isChainPromptOpen, selectedBoardCard, actions],
+    [isChainPromptOpen, selectedBoardCard, actions, vfx],
   );
 
   const handleSurrender = useCallback(() => {
@@ -521,6 +659,34 @@ export function GameBoard({
   const playerBanished = view?.banished ?? [];
   const opponentGraveyard = view?.opponentGraveyard ?? [];
   const opponentBanished = view?.opponentBanished ?? [];
+
+  // Detect card destruction from board state changes
+  useEffect(() => {
+    const currentPlayerIds = new Set(playerBoard.map((c: any) => c.cardId));
+    const currentOpponentIds = new Set(opponentBoard.map((c: any) => c.cardId));
+
+    // Player board cards that disappeared
+    for (const id of prevBoardRef.current) {
+      if (!currentPlayerIds.has(id)) {
+        const defId = playerBoard.find?.((c: any) => c.cardId === id)?.definitionId ?? id;
+        const name = cardLookup[defId]?.name ?? "Card";
+        vfx.push("card_destroyed", { cardName: name }, 1200);
+      }
+    }
+
+    // Opponent board cards that disappeared
+    for (const id of prevOpponentBoardRef.current) {
+      if (!currentOpponentIds.has(id)) {
+        const prevCard = opponentBoard.find?.((c: any) => c.cardId === id);
+        const defId = prevCard?.definitionId ?? id;
+        const name = cardLookup[defId]?.name ?? "Card";
+        vfx.push("card_destroyed", { cardName: name }, 1200);
+      }
+    }
+
+    prevBoardRef.current = currentPlayerIds;
+    prevOpponentBoardRef.current = currentOpponentIds;
+  }, [playerBoard, opponentBoard, cardLookup, vfx]);
 
   const renderGameToText = useCallback(() => {
     if (!view) {
@@ -693,16 +859,36 @@ export function GameBoard({
 
   if (notFound) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#1a1816]">
+      <div className="h-dvh flex flex-col items-center justify-center bg-[#1a1816]">
         <p className="text-white/40 font-bold uppercase text-sm">Match not found.</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="tcg-button mt-4 px-6 py-2 text-sm"
+        >
+          Go Back
+        </button>
       </div>
     );
   }
 
   if (!view) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#1a1816]">
+      <div className="h-dvh flex flex-col items-center justify-center bg-[#1a1816]">
         <p className="text-white/40 font-bold uppercase text-sm">Failed to load game state.</p>
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={() => window.location.reload()}
+            className="tcg-button-primary px-6 py-2 text-sm"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => navigate(-1)}
+            className="tcg-button px-6 py-2 text-sm"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
@@ -734,7 +920,7 @@ export function GameBoard({
       <GameMotionOverlay phase={phase as Phase} isMyTurn={isMyTurn} />
 
       {/* Board playmat */}
-      <div className="board-playmat absolute inset-0">
+      <div className={`board-playmat absolute inset-0 ${isShaking ? "animate-combat-impact-shake" : ""}`}>
         <div className="board-scanlines absolute inset-0 pointer-events-none" />
 
         {/* Ambient floating motes */}
@@ -795,7 +981,7 @@ export function GameBoard({
               cards={playerBoard}
               cardLookup={cardLookup}
               maxSlots={maxBoardSlots}
-              highlightIds={new Set([...attackableIds, ...flipSummonIds])}
+              highlightIds={new Set([...attackableIds, ...flipSummonIds, ...effectActivatableIds])}
               onSlotClick={handleBoardCardClick}
             />
 
@@ -810,16 +996,46 @@ export function GameBoard({
               cardLookup={cardLookup}
               maxSlots={maxSpellTrapSlots}
               interactive
+              highlightIds={activatableSTIds}
               onSlotClick={(cardId: string) => {
                 const stCard = playerSpellTraps.find((c: any) => c.cardId === cardId);
                 if (!stCard) return;
                 const def = cardLookup[stCard.definitionId];
                 if (!def) return;
-                if (stCard.faceDown && def.type === "trap") {
-                  actions.activateTrap(cardId);
-                } else if (stCard.faceDown && def.type === "spell") {
-                  actions.activateSpell(cardId);
+
+                const isTrap = stCard.faceDown && (def.type === "trap" || def.cardType === "trap");
+                const isSpellBackrow = stCard.faceDown && (def.type === "spell" || def.cardType === "spell");
+                const activateFn = isTrap
+                  ? actions.activateTrap
+                  : isSpellBackrow
+                    ? actions.activateSpell
+                    : null;
+                if (!activateFn) return;
+
+                const vfxType = isTrap ? "trap_snap" : "spell_flash";
+                const stName = def.name ?? (isTrap ? "Trap" : "Spell");
+
+                // Check if effect needs targets
+                const effectDef = def.effects?.[0];
+                if (effectDef?.targetFilter && (effectDef.targetCount ?? 0) > 0) {
+                  const candidates = buildTargetCandidates(view, effectDef.targetFilter);
+                  if (candidates.length > 0) {
+                    setTargetSelectorContext({
+                      candidates,
+                      targetCount: effectDef.targetCount ?? 1,
+                      effectDescription: effectDef.description ?? def?.shortEffect ?? "Select a target",
+                      callback: (targetIds: string[]) => {
+                        vfx.push(vfxType, { cardName: stName });
+                        activateFn(cardId, targetIds);
+                      },
+                    });
+                    setShowTargetSelector(true);
+                    return;
+                  }
                 }
+
+                vfx.push(vfxType, { cardName: stName });
+                activateFn(cardId);
               }}
             />
           </div>
@@ -830,6 +1046,9 @@ export function GameBoard({
       </div>
 
       {/* === DOM Overlays === */}
+
+      {/* Visual effects layer — attack slash, spell flash, destruction burst */}
+      <GameEffectsLayer events={vfx.events} />
 
       {/* Turn announcement banner */}
       <TurnBanner turnNumber={view.turnNumber} isMyTurn={isMyTurn} />
@@ -983,6 +1202,9 @@ export function GameBoard({
             phase={phase}
             isMyTurn={isMyTurn}
             onActivateEffect={handleActivateEffect}
+            activatableEffects={validActions.canActivateEffect.get(selectedBoardCard!) ?? []}
+            onChangePosition={handleChangePosition}
+            canChangePosition={validActions.canChangePosition.has(selectedBoardCard!)}
             onClose={handleBoardCardDetailClose}
           />
         );

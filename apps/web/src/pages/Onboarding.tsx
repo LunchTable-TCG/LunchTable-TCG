@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useConvexAuth } from "convex/react";
 import * as Sentry from "@sentry/react";
+import { motion, AnimatePresence } from "framer-motion";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { useUserSync } from "@/hooks/auth/useUserSync";
 import { consumeRedirect } from "@/hooks/auth/usePostLoginRedirect";
@@ -11,6 +12,7 @@ import {
   SIGNUP_AVATAR_OPTIONS,
   type SignupAvatarPath,
 } from "@/lib/signupAvatarCatalog";
+import { AmbientBackground } from "@/components/ui/AmbientBackground";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -100,49 +102,92 @@ export function Onboarding() {
       style={{ backgroundImage: `url('${LANDING_BG}')` }}
     >
       <div className="absolute inset-0 bg-black/60" />
+      <AmbientBackground variant="dark" />
 
       <div className="relative z-10 w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1
+          <motion.h1
             className="text-5xl md:text-6xl text-white mb-3 drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
             style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 15 }}
           >
             WELCOME TO THE TABLE
-          </h1>
-          <p
+          </motion.h1>
+          <motion.p
             className="text-[#ffcc00] text-lg drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]"
             style={{ fontFamily: "Special Elite, cursive" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
           >
             {needsUsername
               ? "Step 1 of 3: Choose your name"
               : needsAvatar
                 ? "Step 2 of 3: Pick your avatar"
                 : "Step 3 of 3: Pick your deck"}
-          </p>
+          </motion.p>
         </div>
 
-        {needsUsername && (
-          <UsernameStep
-            setUsernameMutation={setUsernameMutation}
-            onComplete={handleUsernameComplete}
-          />
-        )}
+        {/* Ink progress bar */}
+        <div className="mb-6 mx-auto max-w-md">
+          <div className="h-1 bg-white/20 border border-white/10">
+            <motion.div
+              className="h-full bg-[#ffcc00]"
+              initial={{ width: "0%" }}
+              animate={{ width: needsUsername ? "33%" : needsAvatar ? "66%" : "100%" }}
+              transition={{ type: "spring", stiffness: 200, damping: 25 }}
+            />
+          </div>
+        </div>
 
-        {needsAvatar && (
-          <AvatarSelectionStep
-            setAvatarPathMutation={setAvatarPathMutation}
-            onComplete={handleAvatarComplete}
-          />
-        )}
-
-        {needsDeck && (
-          <DeckSelectionStep
-            decks={starterDecks}
-            selectDeckMutation={selectStarterDeckMutation}
-            onComplete={handleDeckComplete}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          {needsUsername && (
+            <motion.div
+              key="username"
+              initial={{ opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -60 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <UsernameStep
+                setUsernameMutation={setUsernameMutation}
+                onComplete={handleUsernameComplete}
+              />
+            </motion.div>
+          )}
+          {needsAvatar && (
+            <motion.div
+              key="avatar"
+              initial={{ opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -60 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <AvatarSelectionStep
+                setAvatarPathMutation={setAvatarPathMutation}
+                onComplete={handleAvatarComplete}
+              />
+            </motion.div>
+          )}
+          {needsDeck && (
+            <motion.div
+              key="deck"
+              initial={{ opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -60 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <DeckSelectionStep
+                decks={starterDecks}
+                selectDeckMutation={selectStarterDeckMutation}
+                onComplete={handleDeckComplete}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -274,7 +319,7 @@ function AvatarSelectionStep({
               key={avatar.id}
               type="button"
               onClick={() => setSelectedAvatarPath(avatar.path)}
-              className={`relative border-[3px] transition-all ${
+              className={`relative border-[3px] transition-all hover:rotate-1 ${
                 selected
                   ? "border-[#ffcc00] ring-3 ring-[#ffcc00]/70 scale-[1.03]"
                   : "border-[#121212] hover:border-[#ffcc00] hover:scale-[1.02]"
@@ -283,6 +328,7 @@ function AvatarSelectionStep({
                 boxShadow: selected
                   ? "6px 6px 0px 0px rgba(255,204,0,0.8)"
                   : "4px 4px 0px 0px rgba(18,18,18,1)",
+                transition: "transform 0.2s ease",
               }}
               aria-label={`Choose ${avatar.id}`}
             >
@@ -359,20 +405,34 @@ function DeckSelectionStep({
 
   return (
     <div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+      <motion.div
+        className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8"
+        initial="hidden"
+        animate="visible"
+        variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+      >
         {decks.map((deck) => {
           const color = ARCHETYPE_COLORS[deck.archetype] ?? "#666";
           const emoji = ARCHETYPE_EMOJI[deck.archetype] ?? "\u{1F0CF}";
           const isSelected = selected === deck.deckCode;
 
           return (
-            <button
+            <motion.button
               key={deck.deckCode}
               type="button"
               onClick={() => setSelected(deck.deckCode)}
+              variants={{
+                hidden: { opacity: 0, y: 16, scale: 0.95 },
+                visible: {
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                  transition: { type: "spring", stiffness: 300, damping: 24 },
+                },
+              }}
+              whileHover={{ y: -4, boxShadow: "8px 8px 0px 0px rgba(18,18,18,1)" }}
               className={`
-                paper-panel p-5 text-left transition-all cursor-pointer
-                hover:-translate-y-1
+                paper-panel p-5 text-left cursor-pointer
                 ${isSelected ? "ring-4 ring-[#ffcc00] -translate-y-1" : ""}
               `}
               style={{
@@ -401,10 +461,10 @@ function DeckSelectionStep({
               </p>
               <p className="text-xs text-[#444] leading-snug">{deck.description}</p>
               <p className="text-[10px] text-[#999] mt-2 uppercase">{deck.cardCount} cards</p>
-            </button>
+            </motion.button>
           );
         })}
-      </div>
+      </motion.div>
 
       {error && (
         <p className="text-red-600 text-sm font-bold uppercase text-center mb-4">{error}</p>

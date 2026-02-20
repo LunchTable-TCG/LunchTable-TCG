@@ -13,7 +13,7 @@ import { AudioContextGate, AudioControlsDock, useAudio } from "@/components/audi
 import { getAudioContextFromPath } from "@/lib/audio/routeContext";
 import { sendChatToHost } from "@/lib/iframe";
 import { Breadcrumb, BreadcrumbSpacer } from "@/components/layout/Breadcrumb";
-import { PageTransition, FastPageTransition } from "@/components/layout/PageTransition";
+import { PageTransition, FastPageTransition, type TransitionVariant } from "@/components/layout/PageTransition";
 import { BrandedLoader } from "@/components/layout/BrandedLoader";
 import { Home } from "@/pages/Home";
 
@@ -37,6 +37,7 @@ const Settings = lazy(() => import("@/pages/Settings").then(m => ({ default: m.S
 const Pvp = lazy(() => import("@/pages/Pvp").then(m => ({ default: m.Pvp })));
 const Duel = lazy(() => import("@/pages/Duel").then(m => ({ default: m.Duel })));
 const Studio = lazy(() => import("@/pages/Studio").then(m => ({ default: m.Studio })));
+const StreamOverlay = lazy(() => import("@/pages/StreamOverlay").then(m => ({ default: m.StreamOverlay })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -127,6 +128,7 @@ function IframeCommandRouter({
 function RouteAwareAudioDock() {
   const location = useLocation();
   if (location.pathname.startsWith("/play/")) return null;
+  if (location.pathname.startsWith("/stream-overlay")) return null;
   return <AudioControlsDock />;
 }
 
@@ -150,14 +152,46 @@ function Public({ children }: { children: React.ReactNode }) {
   );
 }
 
+function getTransitionVariant(pathname: string): TransitionVariant {
+  // Game-adjacent routes get ink-splash (dramatic circle reveal)
+  if (
+    pathname.startsWith("/story") ||
+    pathname.startsWith("/pvp") ||
+    pathname.startsWith("/duel") ||
+    pathname.startsWith("/onboarding")
+  )
+    return "ink-splash";
+  // Collection/deck routes get wipe (Persona 5 style)
+  if (
+    pathname.startsWith("/collection") ||
+    pathname.startsWith("/decks")
+  )
+    return "wipe";
+  // Everything else gets enhanced fade
+  return "fade";
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   const isPlay = location.pathname.startsWith("/play/");
-  const Wrap = isPlay ? FastPageTransition : PageTransition;
+
+  if (isPlay) {
+    return (
+      <AnimatePresence mode="wait">
+        <FastPageTransition key={location.pathname}>
+          <SentryRoutes location={location}>
+            <Route path="/play/:matchId" element={<Guarded><Play /></Guarded>} />
+          </SentryRoutes>
+        </FastPageTransition>
+      </AnimatePresence>
+    );
+  }
+
+  const variant = getTransitionVariant(location.pathname);
 
   return (
     <AnimatePresence mode="wait">
-      <Wrap key={location.pathname}>
+      <PageTransition key={location.pathname} variant={variant}>
         <SentryRoutes location={location}>
           <Route path="/" element={<Public><Home /></Public>} />
           <Route path="/privacy" element={<Public><Privacy /></Public>} />
@@ -167,6 +201,7 @@ function AnimatedRoutes() {
           <Route path="/agent-dev" element={<Public><AgentDev /></Public>} />
           <Route path="/leaderboard" element={<Public><Leaderboard /></Public>} />
           <Route path="/watch" element={<Public><Watch /></Public>} />
+          <Route path="/stream-overlay" element={<Public><StreamOverlay /></Public>} />
 
           <Route path="/onboarding" element={<Guarded><Onboarding /></Guarded>} />
           <Route path="/collection" element={<Guarded><Collection /></Guarded>} />
@@ -180,9 +215,8 @@ function AnimatedRoutes() {
           <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />
           <Route path="/profile" element={<Guarded><Profile /></Guarded>} />
           <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
-          <Route path="/play/:matchId" element={<Guarded><Play /></Guarded>} />
         </SentryRoutes>
-      </Wrap>
+      </PageTransition>
     </AnimatePresence>
   );
 }
@@ -229,8 +263,8 @@ export function App() {
   return (
     <BrowserRouter>
       <RouteAudioContextSync />
-      <Breadcrumb />
-      <BreadcrumbSpacer />
+      {!isEmbedded && <Breadcrumb />}
+      {!isEmbedded && <BreadcrumbSpacer />}
       <IframeCommandRouter command={startMatchCommand} clearCommand={clearStartMatchCommand} />
       <AnimatedRoutes />
       <RouteAwareAudioDock />

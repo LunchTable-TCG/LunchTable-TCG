@@ -23,7 +23,8 @@ export function VictoryScreen({
 
   return (
     <motion.div
-      className="min-h-screen flex items-center justify-center bg-[#fdfdfb] p-6"
+      className={`min-h-screen flex items-center justify-center p-6 ${won ? 'bg-[#fdfdfb]' : 'bg-black bg-cover bg-center'}`}
+      style={!won ? { backgroundImage: "url('/assets/defeat-bg.png')" } : undefined}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
@@ -126,12 +127,21 @@ export function VictoryScreen({
               NEXT STAGE &rarr;
             </button>
           )}
+          {!won && (
+            <button
+              type="button"
+              onClick={() => navigate(storyPath)}
+              className="tcg-button-primary px-8 py-3 text-lg w-full"
+            >
+              TRY AGAIN
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => navigate(storyPath)}
-            className={`${won && nextStageAvailable ? "tcg-button" : "tcg-button-primary"} px-8 py-3 text-lg w-full`}
+            onClick={() => navigate("/story")}
+            className={`${won && nextStageAvailable ? "tcg-button" : won ? "tcg-button-primary" : "tcg-button"} px-8 py-3 text-lg w-full`}
           >
-            {won ? "BACK TO MAP" : "TRY AGAIN"}
+            BACK TO MAP
           </button>
         </motion.div>
       </div>

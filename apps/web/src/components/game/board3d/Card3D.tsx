@@ -131,8 +131,12 @@ export function Card3D({
 
   // Stats
   const isMonster = cardType === "stereotype" || cardType === "monster";
-  const atk = (cardDef?.attack ?? 0) + (temporaryBoosts?.attack ?? 0);
-  const def = (cardDef?.defense ?? 0) + (temporaryBoosts?.defense ?? 0);
+  const boostAtk = temporaryBoosts?.attack ?? 0;
+  const boostDef = temporaryBoosts?.defense ?? 0;
+  const atk = (cardDef?.attack ?? 0) + boostAtk;
+  const def = (cardDef?.defense ?? 0) + boostDef;
+  const atkColor = boostAtk > 0 ? "#22c55e" : boostAtk < 0 ? "#ef4444" : "#ffcc00";
+  const defColor = boostDef > 0 ? "#22c55e" : boostDef < 0 ? "#ef4444" : "#33ccff";
 
   return (
     <group
@@ -254,8 +258,8 @@ export function Card3D({
                   textShadow: "0 1px 3px rgba(0,0,0,0.9)",
                 }}
               >
-                <span style={{ color: "#ffcc00" }}>ATK {atk}</span>
-                <span style={{ color: "#33ccff" }}>DEF {def}</span>
+                <span style={{ color: atkColor }}>ATK {atk}</span>
+                <span style={{ color: defColor }}>DEF {def}</span>
               </div>
             )}
           </div>
@@ -265,7 +269,7 @@ export function Card3D({
   );
 }
 
-/** Card back texture on the visible face when face-down */
+/** Card back texture on the visible face when face-down — uses meshBasicMaterial for full-brightness */
 function CardBackFace() {
   const texture = useTexture(CARD_BACK_PATH);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -273,11 +277,7 @@ function CardBackFace() {
   return (
     <mesh position={[0, CARD_D / 2 + 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[CARD_W * 0.96, CARD_H * 0.96]} />
-      <meshStandardMaterial
-        map={texture}
-        roughness={0.6}
-        metalness={0.05}
-      />
+      <meshBasicMaterial map={texture} />
     </mesh>
   );
 }
@@ -300,11 +300,7 @@ function CardFrontFace({
       ) : (
         <mesh position={[0, CARD_D / 2 + 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[CARD_W * 0.96, CARD_H * 0.96]} />
-          <meshStandardMaterial
-            color={archetypeColor}
-            roughness={0.5}
-            metalness={0.1}
-          />
+          <meshBasicMaterial color={archetypeColor} />
         </mesh>
       )}
 
@@ -314,7 +310,7 @@ function CardFrontFace({
   );
 }
 
-/** Loads and displays a card art image */
+/** Loads and displays a card art image — uses meshBasicMaterial for full-brightness rendering */
 function CardArtPlane({ path }: { path: string }) {
   const texture = useTexture(path);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -322,16 +318,12 @@ function CardArtPlane({ path }: { path: string }) {
   return (
     <mesh position={[0, CARD_D / 2 + 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[CARD_W * 0.96, CARD_H * 0.96]} />
-      <meshStandardMaterial
-        map={texture}
-        roughness={0.5}
-        metalness={0.05}
-      />
+      <meshBasicMaterial map={texture} />
     </mesh>
   );
 }
 
-/** Loads and displays a card frame PNG overlay (transparent) */
+/** Loads and displays a card frame PNG overlay (transparent) — uses meshBasicMaterial for full-brightness */
 function CardFramePlane({ path }: { path: string }) {
   const texture = useTexture(path);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -339,11 +331,10 @@ function CardFramePlane({ path }: { path: string }) {
   return (
     <mesh position={[0, CARD_D / 2 + 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[CARD_W * 0.96, CARD_H * 0.96]} />
-      <meshStandardMaterial
+      <meshBasicMaterial
         map={texture}
         transparent
-        roughness={0.4}
-        metalness={0.15}
+        alphaTest={0.05}
       />
     </mesh>
   );

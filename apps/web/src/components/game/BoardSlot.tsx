@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { getArchetypeTheme } from "@/lib/archetypeThemes";
 import { getCardArt } from "@/lib/cardArtMap";
 import { FRAME_MONSTER, FRAME_SPELL, FRAME_TRAP, FRAME_ENVIRONMENT, CARD_BACK } from "@/lib/blobUrls";
@@ -95,6 +96,31 @@ export function BoardSlot({ card, cardDef, highlight, onClick, variant = "monste
   const isClickable = !!onClick;
   const isSpellTrap = variant === "spellTrap";
   const { tiltStyle, onMouseMove, onMouseLeave } = useCardTilt({ maxTilt: 4 });
+
+  // Track stat changes for floating popup
+  const prevBoostRef = useRef<{ atk: number; def: number }>({ atk: 0, def: 0 });
+  const [statDelta, setStatDelta] = useState<{ atk: number; def: number } | null>(null);
+
+  const curBoostAtk = card?.temporaryBoosts?.attack ?? 0;
+  const curBoostDef = card?.temporaryBoosts?.defense ?? 0;
+
+  useEffect(() => {
+    if (!card || card.faceDown) {
+      prevBoostRef.current = { atk: 0, def: 0 };
+      return;
+    }
+    const prevAtk = prevBoostRef.current.atk;
+    const prevDef = prevBoostRef.current.def;
+    const atkDelta = curBoostAtk - prevAtk;
+    const defDelta = curBoostDef - prevDef;
+    prevBoostRef.current = { atk: curBoostAtk, def: curBoostDef };
+
+    if (atkDelta !== 0 || defDelta !== 0) {
+      setStatDelta({ atk: atkDelta, def: defDelta });
+      const timer = setTimeout(() => setStatDelta(null), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [card?.cardId, card?.faceDown, curBoostAtk, curBoostDef]);
 
   // Empty slot — scratched zone outline, punk feel
   if (!card) {
@@ -287,10 +313,10 @@ export function BoardSlot({ card, cardDef, highlight, onClick, variant = "monste
                   className="font-['Outfit'] font-black leading-none select-none pointer-events-none uppercase"
                   style={{
                     fontSize: "clamp(28px, 6vw, 48px)",
-                    color: "rgba(255,255,255,0.08)",
-                    textShadow: `2px 2px 0px rgba(0,0,0,0.3), 0 0 20px ${glowHex}40`,
+                    color: "rgba(255,255,255,0.18)",
+                    textShadow: `2px 2px 0px rgba(0,0,0,0.4), 0 0 24px ${glowHex}60`,
                   }}
-                  animate={{ opacity: [0.06, 0.12, 0.06] }}
+                  animate={{ opacity: [0.12, 0.25, 0.12] }}
                   transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                 >
                   {cardDef?.archetype?.charAt(0).toUpperCase() ?? "?"}
@@ -454,6 +480,43 @@ export function BoardSlot({ card, cardDef, highlight, onClick, variant = "monste
           }}
         />
       )}
+
+      {/* Stat change popup */}
+      <AnimatePresence>
+        {statDelta && (
+          <motion.div
+            key={`stat-${curBoostAtk}-${curBoostDef}`}
+            className="absolute -top-2 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-0.5 pointer-events-none"
+            initial={{ opacity: 0, y: 0, scale: 0.5 }}
+            animate={{ opacity: 1, y: -28, scale: 1.2 }}
+            exit={{ opacity: 0, y: -48, scale: 0.8 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          >
+            {statDelta.atk !== 0 && (
+              <span
+                className="font-['Outfit'] font-black text-xs whitespace-nowrap"
+                style={{
+                  color: statDelta.atk > 0 ? "#22c55e" : "#ef4444",
+                  textShadow: "2px 2px 0 rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.5)",
+                }}
+              >
+                {statDelta.atk > 0 ? "+" : ""}{statDelta.atk} ATK
+              </span>
+            )}
+            {statDelta.def !== 0 && (
+              <span
+                className="font-['Outfit'] font-black text-xs whitespace-nowrap"
+                style={{
+                  color: statDelta.def > 0 ? "#22c55e" : "#ef4444",
+                  textShadow: "2px 2px 0 rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.5)",
+                }}
+              >
+                {statDelta.def > 0 ? "+" : ""}{statDelta.def} DEF
+              </span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

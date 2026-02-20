@@ -11,6 +11,9 @@ interface CardDetailOverlayProps {
   onSetSpellTrap?: () => void;
   onActivateSpell?: () => void;
   onActivateEffect?: (effectIndex: number) => void;
+  activatableEffects?: number[];
+  onChangePosition?: () => void;
+  canChangePosition?: boolean;
   onClose: () => void;
 }
 
@@ -77,6 +80,9 @@ export function CardDetailOverlay({
   onSetSpellTrap,
   onActivateSpell,
   onActivateEffect,
+  activatableEffects,
+  onChangePosition,
+  canChangePosition,
   onClose,
 }: CardDetailOverlayProps) {
   const type = cardDef?.type ?? cardDef?.cardType;
@@ -89,6 +95,8 @@ export function CardDetailOverlay({
   const archetypeTheme = getArchetypeTheme(cardDef?.archetype);
   const accentColor = colorMap[archetypeTheme.color] || "#121212";
   const abilities = Array.isArray(cardDef?.ability) ? cardDef.ability : [];
+  // Engine uses effects[] array for activation; fall back to ability[] for display
+  const effects = Array.isArray(cardDef?.effects) ? cardDef.effects : abilities;
 
   return (
     <AnimatePresence>
@@ -185,18 +193,35 @@ export function CardDetailOverlay({
                 </div>
               )}
 
-              {abilities.length > 0 && (
+              {/* Card flavor text */}
+              {cardDef?.flavorText && (
+                <p className="font-['Special_Elite'] text-[11px] leading-snug text-[#555] italic">
+                  {cardDef.flavorText}
+                </p>
+              )}
+
+              {(effects.length > 0 || abilities.length > 0) && (
                 <div className="space-y-1.5">
                   <div className="font-['Outfit'] text-[9px] font-bold uppercase tracking-widest text-[#999]">Effects</div>
-                  {abilities.map((ability: any, i: number) => (
-                    <div
-                      key={i}
-                      className="font-['Special_Elite'] text-[11px] leading-snug text-[#333] bg-[#121212]/5 px-2 py-1.5 border-l-2"
-                      style={{ borderColor: accentColor }}
-                    >
-                      {formatAbility(ability)}
-                    </div>
-                  ))}
+                  {effects.length > 0
+                    ? effects.map((eff: any, i: number) => (
+                        <div
+                          key={i}
+                          className="font-['Special_Elite'] text-[11px] leading-snug text-[#333] bg-[#121212]/5 px-2 py-1.5 border-l-2"
+                          style={{ borderColor: accentColor }}
+                        >
+                          {eff.description || formatAbility(abilities[i]) || "Activatable effect"}
+                        </div>
+                      ))
+                    : abilities.map((ability: any, i: number) => (
+                        <div
+                          key={i}
+                          className="font-['Special_Elite'] text-[11px] leading-snug text-[#333] bg-[#121212]/5 px-2 py-1.5 border-l-2"
+                          style={{ borderColor: accentColor }}
+                        >
+                          {formatAbility(ability)}
+                        </div>
+                      ))}
                 </div>
               )}
             </div>
@@ -248,23 +273,35 @@ export function CardDetailOverlay({
               </button>
             )}
 
-            {location === "board" && isMonster && onActivateEffect && abilities.length > 0 && (
+            {location === "board" && isMonster && (
               <>
                 {!canAct && (
                   <p className="font-['Special_Elite'] text-[11px] text-center text-[#999] italic">
-                    {!isMyTurn ? "Wait for your turn" : "Need main phase to activate effects"}
+                    {!isMyTurn ? "Wait for your turn" : "Need main phase to act"}
                   </p>
                 )}
-                {abilities.map((_: any, i: number) => (
+                {onActivateEffect && effects.length > 0 && effects.map((_eff: any, i: number) => {
+                  const isActivatable = activatableEffects ? activatableEffects.includes(i) : canAct;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => onActivateEffect(i)}
+                      disabled={!isActivatable}
+                      className={`w-full tcg-button text-sm ${!isActivatable ? "opacity-40 cursor-not-allowed" : ""}`}
+                    >
+                      ACTIVATE EFFECT{effects.length > 1 ? ` ${i + 1}` : ""}
+                    </button>
+                  );
+                })}
+                {onChangePosition && (
                   <button
-                    key={i}
-                    onClick={() => onActivateEffect(i)}
-                    disabled={!canAct}
-                    className={`w-full tcg-button text-sm ${!canAct ? "opacity-40 cursor-not-allowed" : ""}`}
+                    onClick={() => onChangePosition()}
+                    disabled={!canAct || !canChangePosition}
+                    className={`w-full tcg-button text-sm ${!canAct || !canChangePosition ? "opacity-40 cursor-not-allowed" : ""}`}
                   >
-                    ACTIVATE EFFECT{abilities.length > 1 ? ` ${i + 1}` : ""}
+                    CHANGE POSITION
                   </button>
-                ))}
+                )}
               </>
             )}
 

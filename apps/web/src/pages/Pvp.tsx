@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { TrayNav } from "@/components/layout/TrayNav";
+import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { LANDING_BG, MENU_TEXTURE } from "@/lib/blobUrls";
 
 type PvpLobbySummary = {
@@ -221,24 +222,40 @@ export function Pvp() {
       style={{ backgroundImage: `url('${LANDING_BG}')` }}
     >
       <div className="absolute inset-0 bg-black/75" />
+      <AmbientBackground variant="dark" />
 
       <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 py-8 pb-24">
         <header className="text-center mb-6">
-          <h1
+          <motion.h1
             className="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
             style={{ fontFamily: "Outfit, sans-serif" }}
+            initial={{ opacity: 0, y: -15 }}
+            animate={{ opacity: 1, y: 0 }}
           >
             PvP Lobby
-          </h1>
-          <p
+          </motion.h1>
+          <motion.p
             className="text-[#ffcc00] text-sm mt-2"
             style={{ fontFamily: "Special Elite, cursive" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
           >
             Human vs Human duels + Human-hosted invites for Milady agents
-          </p>
+          </motion.p>
         </header>
 
-        <section
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.1 } } }}
+        >
+
+        <motion.section
+          variants={{
+            hidden: { opacity: 0, y: 16 },
+            visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
+          }}
           className="relative mb-5 p-5 border-2 border-[#121212]"
           style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
         >
@@ -296,9 +313,13 @@ export function Pvp() {
               </p>
             )}
           </div>
-        </section>
+        </motion.section>
 
-        <section
+        <motion.section
+          variants={{
+            hidden: { opacity: 0, y: 16 },
+            visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
+          }}
           className="relative mb-5 p-5 border-2 border-[#121212]"
           style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
         >
@@ -326,21 +347,29 @@ export function Pvp() {
               </button>
             </div>
           </div>
-        </section>
+        </motion.section>
 
         {myLobby?.status === "waiting" && (
-          <section
+          <motion.section
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
+            }}
             className="relative mb-5 p-5 border-2 border-[#121212] animate-waiting-glow"
             style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
           >
             <div className="absolute inset-0 bg-white/82 pointer-events-none" />
             <div className="relative">
               <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-2 flex items-center gap-2">
-                <motion.span
-                  className="inline-block w-2.5 h-2.5 rounded-full bg-[#ffcc00]"
-                  animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                />
+                <span className="relative inline-flex items-center justify-center w-4 h-4">
+                  <motion.span
+                    className="absolute w-2.5 h-2.5 rounded-full bg-[#ffcc00]"
+                    animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                  <span className="absolute w-full h-full rounded-full border border-[#ffcc00]/40 animate-radar-ping" />
+                  <span className="absolute w-full h-full rounded-full border border-[#ffcc00]/30 animate-radar-ping" style={{ animationDelay: "0.5s" }} />
+                </span>
                 Your Waiting Lobby
               </p>
               <p className="text-xs text-[#444] mb-1">
@@ -384,10 +413,14 @@ export function Pvp() {
                 Agents can join this lobby via <span className="font-mono">JOIN_LTCG_MATCH</span> using the match ID.
               </p>
             </div>
-          </section>
+          </motion.section>
         )}
 
-        <section
+        <motion.section
+          variants={{
+            hidden: { opacity: 0, y: 16 },
+            visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
+          }}
           className="relative p-5 border-2 border-[#121212]"
           style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
         >
@@ -405,8 +438,8 @@ export function Pvp() {
                     <motion.div
                       key={lobby.matchId}
                       className="border border-[#121212]/30 bg-white/70 px-3 py-2 flex items-center justify-between gap-2"
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
+                      initial={{ opacity: 0, x: -20, scale: 0.95 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
                       exit={{ opacity: 0, x: 20 }}
                       transition={{ delay: index * 0.05, type: "spring", stiffness: 300, damping: 25 }}
                       layout
@@ -447,7 +480,9 @@ export function Pvp() {
               </div>
             )}
           </div>
-        </section>
+        </motion.section>
+
+        </motion.div>
 
         {(error || message || copied) && (
           <div className="mt-4 text-center">

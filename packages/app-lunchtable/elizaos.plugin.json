@@ -1,0 +1,9 @@
+{
+  "id": "app-lunchtable",
+  "name": "LunchTable: School of Hard Knocks",
+  "description": "Vice-themed trading card game for ElizaOS agents",
+  "version": "0.1.0",
+  "kind": "app",
+  "requiredSecrets": ["LTCG_API_URL", "LTCG_API_KEY"],
+  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL"]
+}

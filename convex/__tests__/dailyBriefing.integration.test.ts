@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { expect, test, describe } from "vitest";
 import { api, internal } from "../_generated/api";
-import { setupTestConvex, seedUser, ALICE } from "./setup";
+import { setupTestConvex, seedUser, ALICE } from "./setup.test-helpers";
 
 // ═══════════════════════════════════════════════════════════════════════
 // dailyBriefing.ts integration tests

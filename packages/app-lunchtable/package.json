@@ -1,5 +1,5 @@
 {
-  "name": "@lunchtable-tcg/app-lunchtable",
+  "name": "@lunchtable/app-lunchtable",
   "version": "0.1.0",
   "description": "ElizaOS app wrapper for LunchTable Trading Card Game (viewer + agent plugin)",
   "type": "module",
@@ -7,6 +7,13 @@
   "types": "dist/index.d.ts",
   "packageType": "app",
   "platform": "node",
+  "license": "MIT",
+  "homepage": "https://lunchtable.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dexploarer/LTCG-v2",
+    "directory": "packages/app-lunchtable"
+  },
   "keywords": ["app", "elizaos", "game", "tcg", "lunchtable"],
   "exports": {
     ".": {
@@ -15,7 +22,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "elizaos.plugin.json"
   ],
   "scripts": {
     "build": "tsc",
@@ -23,7 +31,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@lunchtable-tcg/plugin-ltcg": "workspace:*"
+    "@lunchtable/plugin-ltcg": "workspace:*"
   },
   "peerDependencies": {
     "@elizaos/core": ">=1.0.0"
@@ -38,13 +46,13 @@
       "displayName": "LunchTable: School of Hard Knocks",
       "category": "game",
       "launchType": "connect",
-      "launchUrl": "http://localhost:3334",
-      "icon": null,
+      "launchUrl": "https://lunchtable.app",
+      "icon": "https://lunchtable.app/favicon.svg",
       "capabilities": ["observe", "control", "story-mode", "pvp"],
       "minPlayers": 1,
       "maxPlayers": 2,
       "viewer": {
-        "url": "http://localhost:3334",
+        "url": "https://lunchtable.app",
         "embedParams": {
           "embedded": "true",
           "mode": "play"

@@ -5,7 +5,11 @@ import { toast } from "sonner";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import posthog from "@/lib/posthog";
-import { LANDING_BG, MENU_TEXTURE, MILUNCHLADY_PFP_AGENT, OPENCLAWD_PFP } from "@/lib/blobUrls";
+import { LANDING_BG, MENU_TEXTURE, MILUNCHLADY_PFP_AGENT, OPENCLAWD_PFP, TAPE, DECO_PILLS } from "@/lib/blobUrls";
+import { ComicImpactText } from "@/components/ui/ComicImpactText";
+import { SpeechBubble } from "@/components/ui/SpeechBubble";
+import { StickerBadge } from "@/components/ui/StickerBadge";
+import { DecorativeScatter } from "@/components/ui/DecorativeScatter";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -65,6 +69,14 @@ const BABYLON_QUICKSTART_URL =
 const SHARE_BABYLON_LABEL_DEFAULT = "Share Babylon Quick Start";
 const SHARE_FEEDBACK_MS = 2000;
 
+const SCATTER_ELEMENTS = [
+  { src: TAPE, size: 64, opacity: 0.15 },
+  { src: DECO_PILLS, size: 48, opacity: 0.12 },
+  { src: TAPE, size: 56, opacity: 0.1 },
+  { src: DECO_PILLS, size: 40, opacity: 0.14 },
+  { src: TAPE, size: 52, opacity: 0.13 },
+];
+
 // ── Sub-components ─────────────────────────────────────────────────
 
 function PlatformCard({
@@ -77,10 +89,11 @@ function PlatformCard({
   onSelect: () => void;
 }) {
   const info = PLATFORM_INFO[platform];
+  const skewClass = platform === "milaidy" ? "clip-skew-left" : "clip-skew-right";
   return (
     <button
       onClick={onSelect}
-      className={`relative text-left p-5 md:p-6 transition-all overflow-hidden ${
+      className={`relative text-left p-5 md:p-6 transition-all overflow-hidden ${skewClass} ${
         selected
           ? "bg-[#121212] text-white -translate-y-1 shadow-[6px_6px_0px_rgba(255,204,0,0.4)]"
           : "bg-white/90 text-[#121212] hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_rgba(0,0,0,0.2)]"
@@ -92,7 +105,7 @@ function PlatformCard({
         <img
           src={info.image}
           alt={info.name}
-          className={`w-16 h-16 md:w-20 md:h-20 object-contain shrink-0 drop-shadow-lg ${
+          className={`w-24 h-24 md:w-28 md:h-28 object-contain shrink-0 drop-shadow-xl ${
             selected ? "brightness-110" : "brightness-95"
           }`}
           draggable={false}
@@ -114,15 +127,12 @@ function PlatformCard({
       </div>
       <div className="flex flex-wrap gap-1.5">
         {info.features.map((f) => (
-          <span
+          <StickerBadge
             key={f}
-            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-              selected ? "bg-white/10 text-white/70" : "bg-[#121212]/5 text-[#121212]/50"
-            }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            {f}
-          </span>
+            label={f}
+            variant="tag"
+            className={selected ? "!bg-white/10 !text-white/70 !border-white/20" : "!bg-[#121212]/5 !text-[#121212]/50 !border-[#121212]/20"}
+          />
         ))}
       </div>
     </button>
@@ -362,21 +372,36 @@ export function AgentDev() {
     >
       <div className="absolute inset-0 bg-black/80" />
 
+      {/* Decorative scatter behind content */}
+      <DecorativeScatter
+        elements={SCATTER_ELEMENTS}
+        density={5}
+        seed={77}
+        className="z-[1]"
+      />
+
       <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 py-10 pb-24">
         {/* Header */}
         <div className="mb-10">
-          <h1
-            className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-white drop-shadow-[3px_3px_0px_rgba(0,0,0,1)] mb-2"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Agent Dev
-          </h1>
+          <ComicImpactText text="AGENT DEV" size="lg" color="#fff" animate />
           <p
-            className="text-[#ffcc00] text-sm md:text-base"
+            className="text-[#ffcc00] text-sm md:text-base mt-3"
             style={{ fontFamily: "Special Elite, cursive" }}
           >
             Connect your AI agent to play LunchTable
           </p>
+
+          {/* Speech bubble call-to-action */}
+          <div className="mt-4">
+            <SpeechBubble variant="burst" tail="none">
+              <span
+                className="text-base font-black uppercase tracking-tight"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Pick your side!
+              </span>
+            </SpeechBubble>
+          </div>
         </div>
 
         {/* Step 1: Choose platform */}
@@ -540,8 +565,8 @@ export function AgentDev() {
                   </p>
                   <code className="block px-4 py-2.5 bg-[#121212] text-green-400 text-xs font-mono border-2 border-[#121212]">
                     {platform === "milaidy"
-                      ? "milady plugins add @lunchtable-tcg/app-lunchtable"
-                      : "npm install @lunchtable-tcg/plugin-ltcg"}
+                      ? "milady plugins add @lunchtable/app-lunchtable"
+                      : "npm install @lunchtable/plugin-ltcg"}
                   </code>
                 </div>
 

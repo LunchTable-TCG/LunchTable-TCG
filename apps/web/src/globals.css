@@ -37,6 +37,11 @@
   --font-heading: "Outfit", sans-serif;
   --font-body: "Inter", sans-serif;
   --font-special: "Special Elite", cursive;
+
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 @layer base {
@@ -1016,4 +1021,136 @@ html {
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.4);
   line-height: 1;
+}
+
+/* === AAA UI Keyframes & Utilities === */
+
+@keyframes radar-ping {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes ink-stamp {
+  0% { transform: scale(2) rotate(-8deg); opacity: 0; }
+  60% { transform: scale(0.95) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes title-drop {
+  0% { transform: scale(0) rotate(-3deg); opacity: 0; }
+  60% { transform: scale(1.08) rotate(1deg); opacity: 1; }
+  80% { transform: scale(0.97) rotate(-0.5deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes typewriter-blink {
+  0%, 100% { border-color: transparent; }
+  50% { border-color: #121212; }
+}
+
+.animate-ink-stamp {
+  animation: ink-stamp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-title-drop {
+  animation: title-drop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-radar-ping {
+  animation: radar-ping 1.5s ease-out infinite;
+}
+
+.card-tilt-container {
+  perspective: 800px;
+}
+
+.card-shine {
+  background: linear-gradient(
+    135deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.15) 40%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0.15) 60%,
+    transparent 80%
+  );
+  background-size: 200% 200%;
+  pointer-events: none;
+}
+
+/* === Comic Panel Skew & Speed Lines === */
+
+/* Skewed panels — Persona 5 parallelogram containers */
+.clip-skew-left { clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%); }
+.clip-skew-right { clip-path: polygon(0% 0%, calc(100% - 12px) 0%, 100% 100%, 12px 100%); }
+
+/* Manga speed lines (conic gradient) */
+.speed-lines {
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(18,18,18,0.06) 1deg, transparent 2.5deg);
+  background-size: 100% 100%;
+}
+
+/* Halftone event flash */
+@keyframes halftone-flash {
+  0% { opacity: 0; }
+  30% { opacity: 0.15; }
+  100% { opacity: 0; }
+}
+.halftone-event {
+  background: radial-gradient(circle, #121212 1px, transparent 1px);
+  background-size: 6px 6px;
+  mix-blend-mode: multiply;
+}
+
+/* Sticker rotation variants */
+.sticker-tilt-1 { transform: rotate(-4deg); }
+.sticker-tilt-2 { transform: rotate(3deg); }
+.sticker-tilt-3 { transform: rotate(-6deg); }
+.sticker-tilt-4 { transform: rotate(2deg); }
+
+/* Dramatic angled text */
+.text-angled { transform: rotate(-3deg) skewX(-5deg); }
+.text-vertical { writing-mode: vertical-rl; transform: rotate(180deg); }
+
+/* Reduced-motion: disable all custom animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-ink-stamp,
+  .animate-title-drop,
+  .animate-radar-ping,
+  .animate-waiting-glow,
+  .animate-card-summon-3d,
+  .animate-card-flip-in,
+  .skeleton-shimmer {
+    animation: none !important;
+  }
+
+  .chalk-particle,
+  .board-ambient-mote {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
+/* === Skeleton Shimmer === */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 60%
+  );
+  background-size: 200% 100%;
+  background-position: -200% 0;
+  animation: shimmer 1.5s linear infinite;
+  pointer-events: none;
 }

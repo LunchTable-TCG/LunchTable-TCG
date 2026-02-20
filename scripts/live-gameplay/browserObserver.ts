@@ -38,14 +38,10 @@ export async function createBrowserObserver(args: {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 
   async function open() {
-    await appendTimeline(timelinePath, { type: "note", message: `browser_open url=${webUrl}` });
-    await page.goto(withEmbeddedParam(webUrl), { waitUntil: "domcontentloaded" });
-
-    // The app expects a milaidy-style postMessage handshake. For local automation,
-    // ensure the web origin is in the allowlist (apps/web/src/lib/iframe.ts).
-    await page.evaluate((apiKey) => {
-      window.postMessage({ type: "LTCG_AUTH", authToken: apiKey }, "*");
-    }, args.apiKey);
+    // Load the stream overlay page directly — auth via query param, no postMessage needed.
+    const overlayUrl = `${webUrl}/stream-overlay?apiKey=${encodeURIComponent(args.apiKey)}&embedded=true`;
+    await appendTimeline(timelinePath, { type: "note", message: `browser_open url=${overlayUrl}` });
+    await page.goto(overlayUrl, { waitUntil: "domcontentloaded" });
 
     // Wait until the spectator snapshot hook is present.
     const startedAt = Date.now();

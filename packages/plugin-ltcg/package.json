@@ -1,5 +1,5 @@
 {
-  "name": "@lunchtable-tcg/plugin-ltcg",
+  "name": "@lunchtable/plugin-ltcg",
   "version": "0.1.0",
   "description": "ElizaOS-compatible plugin that enables AI agents to play LunchTable TCG stories and quick duels",
   "type": "module",
@@ -7,8 +7,14 @@
   "types": "dist/index.d.ts",
   "packageType": "plugin",
   "platform": "node",
-  "keywords": ["plugin", "elizaos", "game", "tcg"],
+  "license": "MIT",
   "homepage": "https://lunchtable.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dexploarer/LTCG-v2",
+    "directory": "packages/plugin-ltcg"
+  },
+  "keywords": ["plugin", "elizaos", "game", "tcg"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,7 +22,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "elizaos.plugin.json"
   ],
   "scripts": {
     "build": "tsc",
@@ -48,29 +55,28 @@
         "type": "string",
         "description": "Optional web endpoint that serves soundtrack JSON (e.g. https://app.example.com/api/soundtrack)",
         "required": false
+      },
+      "RETAKE_API_URL": {
+        "type": "string",
+        "description": "retake.tv API base URL for streaming (e.g. https://retake.tv/api/v1)",
+        "required": false
+      },
+      "RETAKE_AGENT_TOKEN": {
+        "type": "string",
+        "description": "retake.tv agent access token from registration",
+        "required": false,
+        "sensitive": true
+      },
+      "RETAKE_GAME_URL": {
+        "type": "string",
+        "description": "Game frontend URL for video pipeline (e.g. http://localhost:3334)",
+        "required": false
       }
     }
   },
   "elizaos": {
-    "kind": "app",
-    "app": {
-      "displayName": "LunchTable: School of Hard Knocks",
-      "category": "game",
-      "launchType": "connect",
-      "launchUrl": "https://lunchtable.app",
-      "icon": null,
-      "capabilities": ["observe", "control", "story-mode", "pvp", "spectate", "chat"],
-      "minPlayers": 1,
-      "maxPlayers": 2,
-      "viewer": {
-        "url": "https://lunchtable.app",
-        "embedParams": {
-          "embedded": "true",
-          "mode": "play"
-        },
-        "postMessageAuth": true,
-        "sandbox": "allow-scripts allow-same-origin allow-popups allow-forms"
-      }
-    }
+    "kind": "plugin",
+    "displayName": "LunchTable TCG Plugin",
+    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL"]
   }
 }

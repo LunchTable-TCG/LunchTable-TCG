@@ -1,5 +1,14 @@
+import { motion } from "framer-motion";
 import { TrayNav } from "@/components/layout/TrayNav";
-import { PRIVACY_BG, MENU_TEXTURE } from "@/lib/blobUrls";
+import { PRIVACY_BG, MENU_TEXTURE, TAPE } from "@/lib/blobUrls";
+import { SpeechBubble } from "@/components/ui/SpeechBubble";
+import { DecorativeScatter } from "@/components/ui/DecorativeScatter";
+
+const SCATTER_ELEMENTS = [
+  { src: TAPE, size: 48, opacity: 0.12 },
+  { src: TAPE, size: 40, opacity: 0.1 },
+  { src: TAPE, size: 44, opacity: 0.11 },
+];
 
 export function Privacy() {
   return (
@@ -20,13 +29,41 @@ export function Privacy() {
         >
           <div className="absolute inset-0 bg-white/60 pointer-events-none" />
 
-          <div className="relative">
-            <h1
+          {/* Decorative scatter in margins */}
+          <DecorativeScatter elements={SCATTER_ELEMENTS} density={3} seed={55} />
+
+          {/* Margin thought bubbles */}
+          <div className="absolute -right-2 top-24 hidden lg:block z-20" style={{ transform: "rotate(3deg)" }}>
+            <SpeechBubble variant="thought" tail="none" className="!max-w-[160px]">
+              <span className="text-xs">boring but important!</span>
+            </SpeechBubble>
+          </div>
+          <div className="absolute -right-4 top-[55%] hidden lg:block z-20" style={{ transform: "rotate(-2deg)" }}>
+            <SpeechBubble variant="thought" tail="none" className="!max-w-[150px]">
+              <span className="text-xs">lawyers made us write this</span>
+            </SpeechBubble>
+          </div>
+          <div className="absolute -right-2 bottom-32 hidden lg:block z-20" style={{ transform: "rotate(1deg)" }}>
+            <SpeechBubble variant="thought" tail="none" className="!max-w-[140px]">
+              <span className="text-xs">we promise we're cool</span>
+            </SpeechBubble>
+          </div>
+
+          <motion.div
+            className="relative"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            <motion.h1
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
               className="text-3xl md:text-4xl font-black uppercase tracking-tighter text-[#121212] mb-6"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               Privacy Policy
-            </h1>
+            </motion.h1>
 
             <div
               className="space-y-4 text-[#121212]/80 text-sm md:text-base leading-relaxed"
@@ -48,7 +85,9 @@ export function Privacy() {
                 wallet address. We do not store private keys.
               </p>
 
-              <h2 className="text-lg font-bold text-[#121212] mt-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div className="torn-paper-edge h-4 bg-[#121212]/5 my-4" />
+
+              <h2 className="text-lg font-bold text-[#121212]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 2. How We Use Your Information
               </h2>
               <p>
@@ -57,7 +96,9 @@ export function Privacy() {
                 communicate service updates.
               </p>
 
-              <h2 className="text-lg font-bold text-[#121212] mt-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div className="torn-paper-edge h-4 bg-[#121212]/5 my-4" />
+
+              <h2 className="text-lg font-bold text-[#121212]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 3. Third-Party Services
               </h2>
               <p>
@@ -65,7 +106,9 @@ export function Privacy() {
                 data, and retake.tv for gameplay streaming. Each service operates under its own privacy policy.
               </p>
 
-              <h2 className="text-lg font-bold text-[#121212] mt-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div className="torn-paper-edge h-4 bg-[#121212]/5 my-4" />
+
+              <h2 className="text-lg font-bold text-[#121212]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 4. AI Agent Interactions
               </h2>
               <p>
@@ -73,7 +116,9 @@ export function Privacy() {
                 may be streamed publicly via retake.tv. Your username and game state are visible during streamed matches.
               </p>
 
-              <h2 className="text-lg font-bold text-[#121212] mt-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div className="torn-paper-edge h-4 bg-[#121212]/5 my-4" />
+
+              <h2 className="text-lg font-bold text-[#121212]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 5. Embedded Environment
               </h2>
               <p>
@@ -82,7 +127,9 @@ export function Privacy() {
                 described above.
               </p>
 
-              <h2 className="text-lg font-bold text-[#121212] mt-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div className="torn-paper-edge h-4 bg-[#121212]/5 my-4" />
+
+              <h2 className="text-lg font-bold text-[#121212]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 6. Data Retention
               </h2>
               <p>
@@ -90,14 +137,16 @@ export function Privacy() {
                 your account is active. You may request deletion of your account and associated data at any time.
               </p>
 
-              <h2 className="text-lg font-bold text-[#121212] mt-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div className="torn-paper-edge h-4 bg-[#121212]/5 my-4" />
+
+              <h2 className="text-lg font-bold text-[#121212]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 7. Contact
               </h2>
               <p>
                 For privacy-related inquiries, reach out to us through the channels listed on our About page.
               </p>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
 

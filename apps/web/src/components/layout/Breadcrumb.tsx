@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from "react-router";
+import { motion } from "framer-motion";
 import { NAV_BACK, NAV_HOME } from "@/lib/blobUrls";
 
 type Crumb = {
@@ -25,6 +26,19 @@ const ROUTE_LABELS: Record<string, string> = {
   "agent-dev": "Agent Dev",
   duel: "Duel",
   studio: "Studio",
+};
+
+const ROUTE_ACCENT: Record<string, string> = {
+  story: "#ffcc00",
+  pvp: "#e53e3e",
+  duel: "#e53e3e",
+  collection: "#3182ce",
+  decks: "#3182ce",
+  cliques: "#805ad5",
+  profile: "#38a169",
+  leaderboard: "#d69e2e",
+  watch: "#e53e3e",
+  token: "#ffcc00",
 };
 
 /** Pages where the breadcrumb should NOT render. */
@@ -70,7 +84,7 @@ function useShouldShow(): boolean {
 export function BreadcrumbSpacer() {
   const show = useShouldShow();
   if (!show) return null;
-  return <div className="h-12" />;
+  return <div className="h-12" style={{ marginTop: "var(--safe-area-top)" }} />;
 }
 
 export function Breadcrumb() {
@@ -84,13 +98,20 @@ export function Breadcrumb() {
   if (crumbs.length <= 1) return null;
 
   const parentCrumb = crumbs[crumbs.length - 2]!;
+  const firstSegment = pathname.split("/").filter(Boolean)[0] ?? "";
+  const accentColor = ROUTE_ACCENT[firstSegment] ?? "#121212";
 
   return (
-    <nav
-      className="fixed top-0 left-0 right-0 z-30 h-12 px-3 flex items-center gap-2 bg-[#fdfdfb] border-b-2 border-[#121212]"
+    <motion.nav
+      key={pathname}
+      initial={{ y: -48, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      className="fixed left-0 right-0 z-30 h-12 px-3 flex items-center gap-2 bg-[#fdfdfb]"
+      style={{ top: "var(--safe-area-top)" }}
       aria-label="Breadcrumb"
     >
-      {/* Back button — comic "Back" image */}
+      {/* Back button -- comic "Back" image */}
       <button
         type="button"
         onClick={() => navigate(parentCrumb.path)}
@@ -116,7 +137,13 @@ export function Breadcrumb() {
           const isHome = i === 0;
 
           return (
-            <li key={crumb.path} className="flex items-center gap-1.5 whitespace-nowrap">
+            <motion.li
+              key={crumb.path}
+              className="flex items-center gap-1.5 whitespace-nowrap"
+              initial={{ opacity: 0, x: -5 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.08 }}
+            >
               {i > 0 && (
                 <span className="text-[#121212]/30 select-none">/</span>
               )}
@@ -136,7 +163,7 @@ export function Breadcrumb() {
                   />
                 </button>
               ) : isLast ? (
-                <span className="text-[#121212]">{crumb.label}</span>
+                <span className="text-[#121212] comic-stamp">{crumb.label}</span>
               ) : (
                 <button
                   type="button"
@@ -146,10 +173,16 @@ export function Breadcrumb() {
                   {crumb.label}
                 </button>
               )}
-            </li>
+            </motion.li>
           );
         })}
       </ol>
-    </nav>
+
+      {/* Skewed accent bar at bottom */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-1 clip-skew-left"
+        style={{ backgroundColor: accentColor }}
+      />
+    </motion.nav>
   );
 }

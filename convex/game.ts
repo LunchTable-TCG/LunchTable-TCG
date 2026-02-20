@@ -9,11 +9,11 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireUser } from "./auth";
-import { LTCGCards } from "@lunchtable-tcg/cards";
-import { LTCGMatch } from "@lunchtable-tcg/match";
-import { LTCGStory } from "@lunchtable-tcg/story";
-import { createInitialState, DEFAULT_CONFIG, buildCardLookup } from "@lunchtable-tcg/engine";
-import type { Command } from "@lunchtable-tcg/engine";
+import { LTCGCards } from "@lunchtable/cards";
+import { LTCGMatch } from "@lunchtable/match";
+import { LTCGStory } from "@lunchtable/story";
+import { createInitialState, DEFAULT_CONFIG, buildCardLookup, parseCSVAbilities } from "@lunchtable/engine";
+import type { Command } from "@lunchtable/engine";
 import { DECK_RECIPES, STARTER_DECKS } from "./cardData";
 import { buildPublicEventLog, buildPublicSpectatorView } from "./publicSpectator";
 
@@ -512,7 +512,18 @@ export async function resolveActiveDeckForStory(
 export const getAllCards = query({
   args: {},
   returns: v.any(),
-  handler: async (ctx) => cards.cards.getAllCards(ctx),
+  handler: async (ctx) => {
+    const allCards = await cards.cards.getAllCards(ctx);
+    return (allCards || []).map((card: any) => {
+      const effects = parseCSVAbilities(card.ability);
+      if (effects) {
+        for (const eff of effects) {
+          eff.id = `${card._id}:${eff.id}`;
+        }
+      }
+      return { ...card, effects };
+    });
+  },
 });
 
 const vCatalogCard = v.object({
@@ -1935,65 +1946,95 @@ function pickAICommand(
 
 // ── AI Turn ────────────────────────────────────────────────────────
 
+/** AI action delay in ms between individual actions (visible pacing) */
+const AI_ACTION_DELAY_MS = 1_500;
+/** AI chain response delay (shorter, chains should feel snappy) */
+const AI_CHAIN_DELAY_MS = 800;
+/** Max actions per AI turn to prevent infinite loops */
+const AI_MAX_ACTIONS = 20;
+
 export const executeAITurn = internalMutation({
-  args: { matchId: v.string() },
+  args: {
+    matchId: v.string(),
+    stepsRemaining: v.optional(v.number()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const claimed = await claimQueuedAITurn(ctx, args.matchId);
-    if (!claimed) return null;
+    const stepsLeft = args.stepsRemaining ?? AI_MAX_ACTIONS;
+
+    // First call: claim from queue to prevent duplicate scheduling.
+    // Continuation calls (stepsLeft < AI_MAX_ACTIONS) skip the queue check.
+    if (stepsLeft === AI_MAX_ACTIONS) {
+      const claimed = await claimQueuedAITurn(ctx, args.matchId);
+      if (!claimed) return null;
+    }
+
+    if (stepsLeft <= 0) return null;
 
     // Guard: check it's still AI's turn before acting.
-    // This prevents duplicate AI turns if the scheduler fires twice
-    // (e.g., from rapid player actions or network retries).
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     const aiSeat = resolveAICupSeat(meta);
     if ((meta as any)?.status !== "active" || !aiSeat) return null;
 
-    const cardLookup = await getCachedCardLookup(ctx);
+    const viewJson = await match.getPlayerView(ctx, {
+      matchId: args.matchId,
+      seat: aiSeat,
+    });
+    if (!viewJson) return null;
 
-    // Loop up to 20 actions
-    for (let i = 0; i < 20; i++) {
-      const viewJson = await match.getPlayerView(ctx, {
-        matchId: args.matchId,
-        seat: aiSeat,
-      });
-      if (!viewJson) return null;
+    const view = JSON.parse(viewJson);
 
-      const view = JSON.parse(viewJson);
+    // Stop if game is over or no longer AI's turn
+    if (view.gameOver || view.currentTurnPlayer !== aiSeat) return null;
 
-      // Stop if game is over or no longer AI's turn
-      if (view.gameOver || view.currentTurnPlayer !== aiSeat) return null;
-
-      if (Array.isArray(view.currentChain) && view.currentChain.length > 0) {
-        try {
-          await match.submitAction(ctx, {
-            matchId: args.matchId,
-            command: JSON.stringify({ type: "CHAIN_RESPONSE", pass: true }),
-            seat: aiSeat,
-          });
-        } catch {
-          return null;
-        }
-        continue;
+    // Chain handling: only respond if AI has priority
+    if (Array.isArray(view.currentChain) && view.currentChain.length > 0) {
+      if (view.currentPriorityPlayer !== aiSeat) {
+        // Human player has chain priority — stop and let them respond.
+        // The human's action will re-trigger queueAITurn when done.
+        return null;
       }
-
-      // Pick AI command
-      const command = pickAICommand(view, cardLookup);
 
       try {
         await match.submitAction(ctx, {
           matchId: args.matchId,
-          command: JSON.stringify(command),
+          command: JSON.stringify({ type: "CHAIN_RESPONSE", pass: true }),
           seat: aiSeat,
         });
       } catch {
-        // Game ended or state changed between check and submit — safe to ignore
         return null;
       }
 
-      // If command was END_TURN, stop
-      if (command.type === "END_TURN") return null;
+      // Schedule next step with shorter delay for chain resolution
+      await ctx.scheduler.runAfter(AI_CHAIN_DELAY_MS, internal.game.executeAITurn, {
+        matchId: args.matchId,
+        stepsRemaining: stepsLeft - 1,
+      });
+      return null;
     }
+
+    // Pick and execute ONE action
+    const cardLookup = await getCachedCardLookup(ctx);
+    const command = pickAICommand(view, cardLookup);
+
+    try {
+      await match.submitAction(ctx, {
+        matchId: args.matchId,
+        command: JSON.stringify(command),
+        seat: aiSeat,
+      });
+    } catch {
+      return null;
+    }
+
+    // If command was END_TURN, stop
+    if (command.type === "END_TURN") return null;
+
+    // Schedule next action with visible delay
+    await ctx.scheduler.runAfter(AI_ACTION_DELAY_MS, internal.game.executeAITurn, {
+      matchId: args.matchId,
+      stepsRemaining: stepsLeft - 1,
+    });
     return null;
   },
 });

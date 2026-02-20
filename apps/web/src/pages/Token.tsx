@@ -1,6 +1,11 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { TrayNav } from "@/components/layout/TrayNav";
-import { TITLE, VICE_SPLASH, VICE_COUNTER, MENU_TEXTURE, viceImage } from "@/lib/blobUrls";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
+import { TITLE, VICE_SPLASH, VICE_COUNTER, MENU_TEXTURE, MILUNCHLADY_HYPEBEAST, viceImage } from "@/lib/blobUrls";
+import { StickerBadge } from "@/components/ui/StickerBadge";
+import { SpeedLines } from "@/components/ui/SpeedLines";
+import { ComicImpactText } from "@/components/ui/ComicImpactText";
 
 const SOLANA_TOKEN = "DfC2mRB5SNF1eCQZPh2cGi5QhNQnm3jRNHwa5Rtkpump";
 
@@ -77,6 +82,23 @@ const vices = [
   },
 ];
 
+function ViceCardReveal({ children, index }: { children: React.ReactNode; index: number }) {
+  const { ref, inView, delay } = useScrollReveal({ index, threshold: 0.1 });
+  return (
+    <div
+      ref={ref}
+      className="vice-card-wrapper"
+      style={{
+        opacity: inView ? 1 : 0,
+        transform: inView ? "translateY(0) scale(1)" : "translateY(20px) scale(0.9)",
+        transition: `opacity 0.4s ease ${delay}s, transform 0.4s ease ${delay}s`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function Token() {
   const [flippedSlug, setFlippedSlug] = useState<string | null>(null);
 
@@ -92,11 +114,14 @@ export function Token() {
       {/* Header */}
       <div className="relative z-10 pt-8 pb-4 px-6">
         <div className="max-w-3xl mx-auto text-center">
-          <img
+          <motion.img
             src={TITLE}
             alt="LunchTable"
             className="h-12 md:h-16 mx-auto mb-2 drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
             draggable={false}
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
           />
           <p
             className="text-[#ffcc00] text-sm mb-6"
@@ -117,24 +142,39 @@ export function Token() {
         </div>
       </div>
 
-      {/* Vice counter icon */}
+      {/* Vice counter icon with speed lines */}
       <div className="relative z-10 flex justify-center py-6">
-        <img
-          src={VICE_COUNTER}
-          alt="Vice Counter"
-          className="h-20 md:h-28 w-auto opacity-60 invert"
-          draggable={false}
-        />
+        <div className="relative">
+          <SpeedLines intensity={1} />
+          <img
+            src={VICE_COUNTER}
+            alt="Vice Counter"
+            className="h-20 md:h-28 w-auto opacity-60 invert relative z-10"
+            draggable={false}
+          />
+        </div>
       </div>
 
       {/* Section title */}
       <div className="relative z-10 text-center mb-12 px-4 max-w-5xl mx-auto">
-        <h2
-          className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-[#ffcc00] drop-shadow-[4px_4px_0px_rgba(0,0,0,1)] mb-2"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          The 10 Vices
-        </h2>
+        <div className="flex items-center justify-center gap-4 mb-2">
+          <motion.h2
+            className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-[#ffcc00] drop-shadow-[4px_4px_0px_rgba(0,0,0,1)]"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+            initial={{ opacity: 0, scale: 1.5, rotate: -5 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15 }}
+          >
+            The 10 Vices
+          </motion.h2>
+          <StickerBadge label="VICE" variant="stamp" rotation={-4} />
+        </div>
+
+        {/* Static decorative impact text */}
+        <div className="mb-3">
+          <ComicImpactText text="DANGEROUS" size="md" color="#ef4444" rotation={-6} />
+        </div>
+
         <p
           className="text-white/70 text-base md:text-lg"
           style={{ fontFamily: "Special Elite, cursive" }}
@@ -145,8 +185,8 @@ export function Token() {
 
       {/* Vice cards */}
       <div className="relative z-10 flex flex-wrap justify-center items-center gap-8 px-4 pb-16 max-w-7xl mx-auto vice-card-container">
-        {vices.map((vice) => (
-          <div key={vice.slug} className="vice-card-wrapper">
+        {vices.map((vice, i) => (
+          <ViceCardReveal key={vice.slug} index={i}>
             <div
               className={`vice-card ${flippedSlug === vice.slug ? "flipped" : ""}`}
               style={{ "--rotation": `${vice.rotation}deg` } as React.CSSProperties}
@@ -211,8 +251,18 @@ export function Token() {
                 </div>
               </div>
             </div>
-          </div>
+          </ViceCardReveal>
         ))}
+      </div>
+
+      {/* Character insert decoration */}
+      <div className="absolute bottom-24 right-4 z-[5] pointer-events-none hidden md:block">
+        <img
+          src={MILUNCHLADY_HYPEBEAST}
+          alt=""
+          className="h-32 w-auto opacity-40"
+          draggable={false}
+        />
       </div>
 
       {/* Bottom info */}

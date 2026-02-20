@@ -119,6 +119,8 @@ export function useGameActions(
       send({ type: "ACTIVATE_TRAP", cardId, targets }),
     activateEffect: (cardId: string, effectIndex: number, targets?: string[]) =>
       send({ type: "ACTIVATE_EFFECT", cardId, effectIndex, targets }),
+    changePosition: (cardId: string) =>
+      send({ type: "CHANGE_POSITION", cardId }),
     declareAttack: (attackerId: string, targetId?: string) =>
       send({ type: "DECLARE_ATTACK", attackerId, targetId }),
     chainResponse: (cardId?: string, pass = true) =>

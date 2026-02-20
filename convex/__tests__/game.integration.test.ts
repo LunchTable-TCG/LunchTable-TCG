@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { expect, test, describe, beforeEach } from "vitest";
 import { api, internal } from "../_generated/api";
-import { setupTestConvex, seedUser, ALICE, BOB, CHARLIE } from "./setup";
+import { setupTestConvex, seedUser, ALICE, BOB, CHARLIE } from "./setup.test-helpers";
 import {
   getDeckCardIdsFromDeckData,
   findStageByNumber,
