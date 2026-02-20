@@ -30,9 +30,8 @@ describe("pvp lobby lifecycle surface", () => {
     expect(gameSource).toContain("await activatePvpLobbyOnJoin(ctx, args.matchId);");
   });
 
-  it("only allows cancel while waiting and away seat is empty", () => {
+  it("only allows cancel while waiting and delegates to match component", () => {
     expect(gameSource).toContain("if (lobby.status !== \"waiting\")");
-    expect(gameSource).toContain("if ((meta as any).awayId !== null)");
-    expect(gameSource).toContain("Cannot cancel after an away player has joined.");
+    expect(gameSource).toContain("await match.cancelMatch(ctx, { matchId: args.matchId })");
   });
 });
