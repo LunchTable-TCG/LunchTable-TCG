@@ -36,6 +36,8 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: bun install --frozen-lockfile
+      - name: Build engine types (required by dependent packages)
+        run: bunx tsc -p packages/engine/tsconfig.json
       - name: Type check all packages
         run: |
           bunx tsc --noEmit -p apps/web/tsconfig.json

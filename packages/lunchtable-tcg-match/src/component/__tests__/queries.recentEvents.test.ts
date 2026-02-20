@@ -25,7 +25,7 @@ describe("mapRecentEventsRows", () => {
         version: 4,
         events: '[{"type":"PHASE_CHANGED"}]',
         command: '{"type":"ADVANCE_PHASE"}',
-        seat: "host",
+        seat: "host" as const,
         createdAt: 1_700_000_000_000,
       },
     ];
