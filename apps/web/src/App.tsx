@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/react";
 import { Toaster } from "sonner";
 import { AnimatePresence } from "framer-motion";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { useIframeMode } from "@/hooks/useIframeMode";
 import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -244,6 +245,7 @@ export function App() {
         }}
       />
       <Analytics />
+      <SpeedInsights />
     </BrowserRouter>
   );
 }
