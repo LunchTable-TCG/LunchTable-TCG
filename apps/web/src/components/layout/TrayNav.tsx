@@ -9,13 +9,11 @@ import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 const textLinks: Array<
   { label: string; path: string; auth: boolean } | { label: string; href: string }
 > = [
-  { label: "PvP Duel", path: "/duel", auth: true },
   { label: "Cliques", path: "/cliques", auth: true },
   { label: "Agent Dev", path: "/agent-dev", auth: true },
   { label: "Leaderboard", path: "/leaderboard", auth: false },
   { label: "Profile", path: "/profile", auth: true },
   { label: "Settings", path: "/settings", auth: true },
-  { label: "Docs", path: "/about", auth: false },
   { label: "X / Twitter", href: "https://x.com/LunchTableTCG" },
   { label: "Discord", href: import.meta.env.VITE_DISCORD_URL || "#" },
 ];

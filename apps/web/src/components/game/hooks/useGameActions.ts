@@ -123,5 +123,13 @@ export function useGameActions(
       send({ type: "DECLARE_ATTACK", attackerId, targetId }),
     chainResponse: (cardId?: string, pass = true) =>
       send({ type: "CHAIN_RESPONSE", cardId, pass }),
+    pongShoot: (destroyedCardId: string, result: "sink" | "miss") =>
+      send({ type: "PONG_SHOOT", destroyedCardId, result }),
+    pongDecline: (destroyedCardId: string) =>
+      send({ type: "PONG_DECLINE", destroyedCardId }),
+    redemptionShoot: (result: "sink" | "miss") =>
+      send({ type: "REDEMPTION_SHOOT", result }),
+    redemptionDecline: () =>
+      send({ type: "REDEMPTION_DECLINE" }),
   };
 }

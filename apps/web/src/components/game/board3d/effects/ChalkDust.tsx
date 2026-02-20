@@ -1,73 +1,74 @@
-import { useRef, useMemo } from "react";
-import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
+import { useMemo, useEffect } from "react";
+import * as THREE from "three/webgpu";
+import {
+  float, vec3, fract, hash, vertexIndex, time,
+} from "three/tsl";
 
 const PARTICLE_COUNT = 60;
 
 /**
- * Chalk dust particles floating upward — replaces CSS particle overlay.
- * Uses Three.js Points geometry for GPU-efficient rendering.
+ * Chalk dust particles floating upward — entirely GPU-driven via TSL.
+ * No CPU animation loop: positions computed in the vertex shader each frame
+ * using `time` (auto-incrementing uniform) and `hash` for per-particle randomness.
  */
 export function ChalkDust() {
-  const pointsRef = useRef<THREE.Points>(null);
+  const material = useMemo(() => {
+    const mat = new THREE.PointsNodeMaterial({
+      transparent: true,
+      depthWrite: false,
+      sizeAttenuation: true,
+      size: 0.03,
+    });
 
-  const { positions, velocities } = useMemo(() => {
-    const pos = new Float32Array(PARTICLE_COUNT * 3);
-    const vel = new Float32Array(PARTICLE_COUNT * 3);
+    const t = time;
+    const i = float(vertexIndex);
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const i3 = i * 3;
-      // Spread across board area
-      pos[i3] = (Math.random() - 0.5) * 10;     // x
-      pos[i3 + 1] = Math.random() * 3;           // y (height)
-      pos[i3 + 2] = (Math.random() - 0.5) * 7;  // z
+    // Deterministic per-particle seed
+    const seed = i.mul(0.0137);
 
-      // Slow upward drift with slight horizontal wander
-      vel[i3] = (Math.random() - 0.5) * 0.002;
-      vel[i3 + 1] = 0.003 + Math.random() * 0.005;
-      vel[i3 + 2] = (Math.random() - 0.5) * 0.002;
-    }
+    // Initial spread across board area
+    const initX = hash(seed).sub(0.5).mul(10);           // -5..5
+    const initZ = hash(seed.add(0.3)).sub(0.5).mul(7);   // -3.5..3.5
 
-    return { positions: pos, velocities: vel };
+    // Velocity: upward drift + slight horizontal wander
+    const velY = hash(seed.add(0.1)).mul(0.005).add(0.003); // 0.003..0.008
+    const velX = hash(seed.add(0.2)).sub(0.5).mul(0.002);
+    const velZ = hash(seed.add(0.4)).sub(0.5).mul(0.002);
+
+    // Wrap-around: particle resets when it exceeds y range
+    // Cycle covers y from -0.5 to 4.0 (total 4.5 units)
+    const cycleTime = float(4.5).div(velY);
+    const phase = fract(t.div(cycleTime)); // 0..1 repeating
+
+    const x = initX.add(velX.mul(t));
+    const y = float(-0.5).add(phase.mul(4.5)); // -0.5 to 4.0
+    const z = initZ.add(velZ.mul(t));
+
+    mat.positionNode = vec3(x, y, z);
+
+    // Fade out as particle rises (higher = more transparent)
+    const heightFade = float(1).sub(phase);
+    mat.colorNode = vec3(0.9, 0.88, 0.82); // chalk white
+    mat.opacityNode = heightFade.mul(0.15);
+
+    return mat;
   }, []);
 
+  // Geometry with PARTICLE_COUNT vertices (positions overridden by positionNode)
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(PARTICLE_COUNT * 3);
     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     return geo;
-  }, [positions]);
+  }, []);
 
-  useFrame(() => {
-    const posAttr = geometry.attributes.position as THREE.BufferAttribute;
-    const arr = posAttr.array as Float32Array;
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const i3 = i * 3;
-      arr[i3]! += velocities[i3]!;
-      arr[i3 + 1]! += velocities[i3 + 1]!;
-      arr[i3 + 2]! += velocities[i3 + 2]!;
-
-      // Reset particles that float too high
-      if (arr[i3 + 1]! > 4) {
-        arr[i3] = (Math.random() - 0.5) * 10;
-        arr[i3 + 1] = -0.5;
-        arr[i3 + 2] = (Math.random() - 0.5) * 7;
-      }
-    }
-
-    posAttr.needsUpdate = true;
-  });
+  useEffect(() => {
+    return () => { geometry.dispose(); };
+  }, [geometry]);
 
   return (
-    <points ref={pointsRef} geometry={geometry}>
-      <pointsMaterial
-        color="#ffffff"
-        size={0.03}
-        transparent
-        opacity={0.3}
-        sizeAttenuation
-        depthWrite={false}
-      />
+    <points geometry={geometry}>
+      <primitive object={material} attach="material" />
     </points>
   );
 }

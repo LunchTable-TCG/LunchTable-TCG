@@ -168,6 +168,8 @@ function parsePlayerView(value: string | null | undefined): PlayerView | null {
     gameOver: parsed.gameOver === true,
     winner,
     winReason: asWinReason(parsed.winReason),
+    pendingPong: parsePendingPong(parsed.pendingPong),
+    pendingRedemption: parsePendingRedemption(parsed.pendingRedemption),
     players,
     turnPlayer: asSeat(parsed.turnPlayer) ?? currentTurnPlayer,
     gameResult: typeof parsed.gameResult === "string" ? parsed.gameResult : undefined,
@@ -393,4 +395,19 @@ function toFiniteNumber(value: unknown): number | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parsePendingPong(value: unknown): PlayerView["pendingPong"] {
+  if (!isRecord(value)) return null;
+  const seat = asSeat(value.seat);
+  const destroyedCardId = toString(value.destroyedCardId);
+  if (!seat || !destroyedCardId) return null;
+  return { seat, destroyedCardId };
+}
+
+function parsePendingRedemption(value: unknown): PlayerView["pendingRedemption"] {
+  if (!isRecord(value)) return null;
+  const seat = asSeat(value.seat);
+  if (!seat) return null;
+  return { seat };
 }

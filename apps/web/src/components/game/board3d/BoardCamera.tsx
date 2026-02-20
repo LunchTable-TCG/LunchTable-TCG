@@ -1,6 +1,6 @@
 import { useThree } from "@react-three/fiber";
 import { useEffect } from "react";
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 
 /**
  * Fixed camera looking down at ~55-60 degree angle, like Artifact.

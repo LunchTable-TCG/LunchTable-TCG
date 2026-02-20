@@ -3,10 +3,17 @@ import { BoardCamera } from "./BoardCamera";
 import { BoardLighting } from "./BoardLighting";
 import { CenterDivider } from "./CenterDivider";
 import { Card3D } from "./Card3D";
+import { AnimatedCard3D } from "./AnimatedCard3D";
 import { EmptySlot3D } from "./EmptySlot3D";
 import { ActiveFieldGlow } from "./effects/ActiveFieldGlow";
 import { ChalkDust } from "./effects/ChalkDust";
 import { BoardFrame } from "./effects/BoardFrame";
+import { NoiseOverlay, ScanlineOverlay } from "./effects/ProceduralTextures";
+import { SoloCup } from "./props/SoloCup";
+import { CardStack } from "./props/CardStack";
+import { Pencil } from "./props/Pencil";
+import { CrumpledPaper } from "./props/CrumpledPaper";
+import { Dice } from "./props/Dice";
 import type { BoardCard, Phase } from "../types";
 
 // Card slot positions in 3D space
@@ -72,8 +79,32 @@ export function BoardContent({
       {/* Atmosphere */}
       <ChalkDust />
       <BoardFrame />
+      <NoiseOverlay />
+      <ScanlineOverlay />
 
-      {/* --- Opponent Monster Row --- */}
+      {/* --- Board Props (school lunch table dressing) --- */}
+      {/* Solo cups — player corners */}
+      <SoloCup position={[4.8, 0, 3.2]} rotation={[0, 0.3, 0]} scale={0.8} fillLevel={0.4} />
+      <SoloCup position={[-5.0, 0, 2.8]} rotation={[0, -0.5, 0]} scale={0.7} fillLevel={0.7} />
+      {/* Solo cup — opponent side (knocked over) */}
+      <SoloCup position={[4.5, 0, -3.0]} rotation={[Math.PI / 2, 0.8, 0]} scale={0.65} fillLevel={0} />
+
+      {/* Deck zones — card stacks beside the board */}
+      <CardStack position={[3.8, 0, 1.8]} rotation={[0, 0.1, 0]} count={25} />
+      <CardStack position={[3.8, 0, -1.8]} rotation={[0, -0.05, 0]} count={18} />
+
+      {/* Pencil lying across the corner */}
+      <Pencil position={[-4.5, 0.01, -2.0]} rotation={[Math.PI / 2, 0, 0.7]} scale={1.2} />
+
+      {/* Crumpled paper scattered around */}
+      <CrumpledPaper position={[-4.8, 0.08, 1.0]} seed={1} scale={1.1} />
+      <CrumpledPaper position={[5.2, 0.08, -1.5]} seed={7} scale={0.9} />
+      <CrumpledPaper position={[-3.5, 0.08, 3.5]} seed={13} scale={0.7} />
+
+      {/* Dice near player's corner */}
+      <Dice position={[-4.2, 0.12, 3.0]} rotation={[0.3, 0.7, 0.1]} scale={0.8} />
+
+      {/* --- Opponent Monster Row (animated entrance) --- */}
       {Array.from({ length: maxBoardSlots }).map((_, i) => {
         const card = opponentBoard[i];
         const x = SLOT_X[i] ?? (i - 1) * 1.5;
@@ -86,7 +117,7 @@ export function BoardContent({
           );
         }
         return (
-          <Card3D
+          <AnimatedCard3D
             key={`opp-mon-${card.cardId}`}
             cardId={card.cardId}
             definitionId={card.definitionId}
@@ -128,7 +159,7 @@ export function BoardContent({
         );
       })}
 
-      {/* --- Player Monster Row --- */}
+      {/* --- Player Monster Row (animated entrance) --- */}
       {Array.from({ length: maxBoardSlots }).map((_, i) => {
         const card = playerBoard[i];
         const x = SLOT_X[i] ?? (i - 1) * 1.5;
@@ -141,7 +172,7 @@ export function BoardContent({
           );
         }
         return (
-          <Card3D
+          <AnimatedCard3D
             key={`plr-mon-${card.cardId}`}
             cardId={card.cardId}
             definitionId={card.definitionId}

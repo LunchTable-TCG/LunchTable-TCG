@@ -1,33 +1,31 @@
-import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
+import { useMemo } from "react";
+import * as THREE from "three/webgpu";
+import { sin, time } from "three/tsl";
 
 /**
  * Glowing plane underneath the player's card zone when it's their turn.
  * Emissive yellow pulse matching the zine reputation color.
+ * Opacity pulse driven entirely by TSL (GPU-side).
  */
 export function ActiveFieldGlow() {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  useFrame(({ clock }) => {
-    if (!meshRef.current) return;
-    const mat = meshRef.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = 0.08 + Math.sin(clock.elapsedTime * 3) * 0.04;
-  });
+  const material = useMemo(() => {
+    const mat = new THREE.MeshBasicNodeMaterial({
+      color: 0xffcc00,
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    // Pulse: 0.08 + sin(t * 3) * 0.04
+    mat.opacityNode = sin(time.mul(3)).mul(0.04).add(0.08);
+    return mat;
+  }, []);
 
   return (
     <mesh
-      ref={meshRef}
       position={[0, 0.003, 1.85]}
       rotation={[-Math.PI / 2, 0, 0]}
     >
       <planeGeometry args={[6, 3.5]} />
-      <meshBasicMaterial
-        color="#ffcc00"
-        transparent
-        opacity={0.1}
-        side={THREE.DoubleSide}
-      />
+      <primitive object={material} attach="material" />
     </mesh>
   );
 }

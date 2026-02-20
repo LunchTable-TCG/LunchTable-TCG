@@ -33,6 +33,8 @@ const Cliques = lazy(() => import("@/pages/Cliques").then(m => ({ default: m.Cli
 const Profile = lazy(() => import("@/pages/Profile").then(m => ({ default: m.Profile })));
 const Settings = lazy(() => import("@/pages/Settings").then(m => ({ default: m.Settings })));
 const Pvp = lazy(() => import("@/pages/Pvp").then(m => ({ default: m.Pvp })));
+const Duel = lazy(() => import("@/pages/Duel").then(m => ({ default: m.Duel })));
+const Studio = lazy(() => import("@/pages/Studio").then(m => ({ default: m.Studio })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -169,6 +171,8 @@ function AnimatedRoutes() {
           <Route path="/story" element={<Guarded><Story /></Guarded>} />
           <Route path="/story/:chapterId" element={<Guarded><StoryChapter /></Guarded>} />
           <Route path="/pvp" element={<Guarded><Pvp /></Guarded>} />
+          <Route path="/duel" element={<Guarded><Duel /></Guarded>} />
+          <Route path="/studio" element={<Public><Studio /></Public>} />
           <Route path="/decks" element={<Guarded><Decks /></Guarded>} />
           <Route path="/decks/:deckId" element={<Guarded><DeckBuilder /></Guarded>} />
           <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />

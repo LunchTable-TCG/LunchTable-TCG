@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { uniform } from "three/tsl";
 
 interface AttackSlashProps {
   from: [number, number, number];
@@ -11,6 +12,7 @@ interface AttackSlashProps {
 
 /**
  * Glowing slash plane that sweeps from attacker to target.
+ * Opacity driven by TSL uniform (updated from JS); position via useFrame.
  */
 export function AttackSlash({ from, to, color = "#ffcc00", onComplete }: AttackSlashProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -20,6 +22,18 @@ export function AttackSlash({ from, to, color = "#ffcc00", onComplete }: AttackS
   // Direction vector from attacker to target
   const dir = new THREE.Vector3(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
   const angle = Math.atan2(dir.x, dir.z);
+
+  const opacityUniform = useMemo(() => uniform(1), []);
+
+  const material = useMemo(() => {
+    const mat = new THREE.MeshBasicNodeMaterial({
+      color: new THREE.Color(color),
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    mat.opacityNode = opacityUniform;
+    return mat;
+  }, [color, opacityUniform]);
 
   useFrame((_, delta) => {
     if (!groupRef.current || completedRef.current) return;
@@ -34,14 +48,8 @@ export function AttackSlash({ from, to, color = "#ffcc00", onComplete }: AttackS
       from[2] + dir.z * t,
     );
 
-    // Fade out in last 30%
-    const meshes = groupRef.current.children;
-    for (const child of meshes) {
-      if ((child as THREE.Mesh).material) {
-        const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
-        mat.opacity = t > 0.7 ? (1 - t) / 0.3 : 1;
-      }
-    }
+    // Fade out in last 30% via uniform
+    opacityUniform.value = t > 0.7 ? (1 - t) / 0.3 : 1;
 
     if (t >= 1 && !completedRef.current) {
       completedRef.current = true;
@@ -53,12 +61,7 @@ export function AttackSlash({ from, to, color = "#ffcc00", onComplete }: AttackS
     <group ref={groupRef} position={[from[0], from[1] + 0.3, from[2]]}>
       <mesh rotation={[0, angle, Math.PI / 4]}>
         <planeGeometry args={[0.6, 0.06]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={1}
-          side={THREE.DoubleSide}
-        />
+        <primitive object={material} attach="material" />
       </mesh>
     </group>
   );

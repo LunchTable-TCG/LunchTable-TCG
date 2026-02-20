@@ -181,6 +181,8 @@ export type PlayerView = {
   currentChain: ChainLink[];
   winner: Seat | null;
   winReason: "lp_zero" | "deck_out" | "breakdown" | "surrender" | null;
+  pendingPong: { seat: "host" | "away"; destroyedCardId: string } | null;
+  pendingRedemption: { seat: "host" | "away" } | null;
   normalSummonedThisTurn: boolean;
   maxBoardSlots: number;
   maxSpellTrapSlots: number;
