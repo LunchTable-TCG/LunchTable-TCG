@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "cd apps/web && bun run build",
+    "build": "cd apps/web && bun run build && cd ../.. && bun run check:bundle-metrics",
     "dev": "concurrently -n convex,web -c blue,magenta \"bun run dev:convex\" \"bun run dev:web\"",
     "dev:convex": "bash scripts/convex-dev.sh dev",
     "dev:web": "cd apps/web && bun run dev",
@@ -19,6 +19,7 @@
     "test": "vitest",
     "test:once": "vitest run",
     "test:package-exports": "node scripts/test-package-exports.mjs",
+    "check:bundle-metrics": "node scripts/check-bundle-metrics.mjs apps/web/dist",
     "test:live:core": "bun run scripts/live-gameplay/run.ts --suite=core",
     "test:live:full": "bun run scripts/live-gameplay/run.ts --suite=full",
     "test:live:soak": "bun run scripts/live-gameplay/run.ts --suite=soak"
