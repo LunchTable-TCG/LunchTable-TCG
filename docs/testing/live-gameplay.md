@@ -11,6 +11,8 @@ This repo includes a live gameplay harness that validates real match flows end-t
 `core` suite:
 - Start + complete story stage 1
 - Start + finish a quick duel
+- Validate public spectator endpoints return consistent seat + event ordering
+- Validate invalid seat actions are rejected with a 422 contract
 
 `full` suite:
 - `core`, plus additional story stages (default 3 total stages; controlled by `LTCG_FULL_STAGES`)

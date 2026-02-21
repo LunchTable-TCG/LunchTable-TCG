@@ -5,6 +5,8 @@ import type { LiveGameplayReport, LiveGameplayScenarioResult, LiveGameplaySuite 
 import { createBrowserObserver } from "./browserObserver";
 import { runStoryStageScenario } from "./scenarios/storyStage";
 import { runQuickDuelScenario } from "./scenarios/quickDuel";
+import { runPublicViewConsistencyScenario } from "./scenarios/publicViewConsistency";
+import { runInvalidSeatActionScenario } from "./scenarios/invalidSeatAction";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,6 +113,22 @@ async function runScenario<T>(
     if (result && typeof result === "object" && "matchId" in (result as any)) {
       const id = (result as any).matchId;
       if (typeof id === "string") matchId = id;
+    }
+    if (result && typeof result === "object" && Array.isArray((result as any).assertions)) {
+      for (const assertion of (result as any).assertions) {
+        if (!assertion || typeof assertion !== "object") continue;
+        const id = typeof (assertion as any).id === "string" ? (assertion as any).id : null;
+        const ok = typeof (assertion as any).ok === "boolean" ? (assertion as any).ok : null;
+        if (!id || ok === null) continue;
+        assertions.push({
+          id,
+          ok,
+          details:
+            typeof (assertion as any).details === "string"
+              ? (assertion as any).details
+              : undefined,
+        });
+      }
     }
     assertions.push({ id: "completed", ok: true });
     return {
@@ -326,6 +344,44 @@ async function main() {
   scenarios.push(coreDuel.scenarioResult);
   if (coreDuel.scenarioResult.status === "fail" && observer) {
     await observer.screenshot("failure_quick_duel");
+  }
+
+  const publicViewConsistency = await runScenario("public_view_consistency", async () => {
+    let matchId =
+      coreDuel.result &&
+      typeof coreDuel.result === "object" &&
+      typeof (coreDuel.result as any).matchId === "string"
+        ? (coreDuel.result as any).matchId
+        : null;
+
+    if (!matchId) {
+      const fallbackDuel = await client.startDuel();
+      matchId = String((fallbackDuel as any)?.matchId ?? "");
+      if (!matchId) {
+        throw new Error("public view consistency scenario could not acquire a match");
+      }
+    }
+
+    return await runPublicViewConsistencyScenario({
+      client,
+      timelinePath: run.timelinePath,
+      matchId,
+    });
+  });
+  scenarios.push(publicViewConsistency.scenarioResult);
+  if (publicViewConsistency.scenarioResult.status === "fail" && observer) {
+    await observer.screenshot("failure_public_view_consistency");
+  }
+
+  const invalidSeatAction = await runScenario("invalid_seat_action_rejected", async () =>
+    runInvalidSeatActionScenario({
+      client,
+      timelinePath: run.timelinePath,
+    }),
+  );
+  scenarios.push(invalidSeatAction.scenarioResult);
+  if (invalidSeatAction.scenarioResult.status === "fail" && observer) {
+    await observer.screenshot("failure_invalid_seat_action");
   }
 
   if (suite === "full" || suite === "soak") {

@@ -168,6 +168,25 @@ export class LtcgAgentApiClient {
     return await this.requestJson("GET", `/api/agent/game/view?${qs.toString()}`);
   }
 
+  async getPublicView(args: { matchId: string; seat?: "host" | "away" }): Promise<any> {
+    const qs = new URLSearchParams({ matchId: args.matchId });
+    if (args.seat) qs.set("seat", args.seat);
+    return await this.requestJson("GET", `/api/agent/game/public-view?${qs.toString()}`);
+  }
+
+  async getPublicEvents(args: {
+    matchId: string;
+    seat?: "host" | "away";
+    sinceVersion?: number;
+  }): Promise<any[]> {
+    const qs = new URLSearchParams({ matchId: args.matchId });
+    if (args.seat) qs.set("seat", args.seat);
+    if (typeof args.sinceVersion === "number") {
+      qs.set("sinceVersion", String(args.sinceVersion));
+    }
+    return await this.requestJson("GET", `/api/agent/game/public-events?${qs.toString()}`);
+  }
+
   async submitAction(args: {
     matchId: string;
     command: Record<string, unknown>;
