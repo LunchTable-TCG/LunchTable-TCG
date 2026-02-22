@@ -16,6 +16,7 @@ import { createInitialState, DEFAULT_CONFIG, buildCardLookup, parseCSVAbilities 
 import type { Command } from "@lunchtable/engine";
 import { DECK_RECIPES, STARTER_DECKS } from "./cardData";
 import { buildPublicEventLog, buildPublicSpectatorView } from "./publicSpectator";
+import { isPlainObject, normalizeGameCommand } from "./agentRouteHelpers";
 
 const cards: any = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match: any = new LTCGMatch(components.lunchtable_tcg_match as any);
@@ -1316,6 +1317,7 @@ export const startStoryBattle = mutation({
       playerDeck[0],
       aiDeck[0],
     ]);
+    const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
     const initialState = createInitialState(
       cardLookup,
@@ -1324,7 +1326,7 @@ export const startStoryBattle = mutation({
       "cpu",
       playerDeck,
       aiDeck,
-      "host",
+      firstPlayer,
       makeRng(seed),
     );
 
@@ -1590,6 +1592,7 @@ export const __test = {
   assertActorMatchesAuthenticatedUser,
   requireMatchParticipant,
   assertStoryMatchRequesterAuthorized,
+  resolveLegacyCommandPayload,
 };
 
 async function requireSeatOwnership(
@@ -1669,6 +1672,270 @@ function redactRecentEventCommands(
   });
 }
 
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function getCardIdList(zone: unknown): string[] {
+  if (!Array.isArray(zone)) return [];
+  return zone
+    .map((entry) => {
+      if (!isPlainObject(entry)) return null;
+      return typeof entry.cardId === "string" ? entry.cardId : null;
+    })
+    .filter((entry): entry is string => typeof entry === "string");
+}
+
+function getSingleCardId(card: unknown): string[] {
+  if (!isPlainObject(card)) return [];
+  if (typeof card.cardId === "string") return [card.cardId];
+  return [];
+}
+
+function getInstanceDefinitionMap(view: unknown): Record<string, string> {
+  if (!isPlainObject(view) || !isPlainObject(view.instanceDefinitions)) {
+    return {};
+  }
+
+  const map: Record<string, string> = {};
+  for (const [instanceId, definitionId] of Object.entries(view.instanceDefinitions)) {
+    if (typeof definitionId === "string") {
+      map[instanceId] = definitionId;
+    }
+  }
+  return map;
+}
+
+function dedupeIds(ids: string[]): string[] {
+  return [...new Set(ids)];
+}
+
+function collectCommandResolutionZones(view: unknown) {
+  const hand = isPlainObject(view) ? toStringArray(view.hand) : [];
+  const myBoard = isPlainObject(view) ? getCardIdList(view.board) : [];
+  const mySpellTrap = isPlainObject(view) ? getCardIdList(view.spellTrapZone) : [];
+  const myField = isPlainObject(view) ? getSingleCardId(view.fieldSpell) : [];
+  const myGraveyard = isPlainObject(view) ? toStringArray(view.graveyard) : [];
+  const myBanished = isPlainObject(view) ? toStringArray(view.banished) : [];
+
+  const opponentBoard = isPlainObject(view) ? getCardIdList(view.opponentBoard) : [];
+  const opponentSpellTrap = isPlainObject(view) ? getCardIdList(view.opponentSpellTrapZone) : [];
+  const opponentField = isPlainObject(view) ? getSingleCardId(view.opponentFieldSpell) : [];
+  const opponentGraveyard = isPlainObject(view) ? toStringArray(view.opponentGraveyard) : [];
+  const opponentBanished = isPlainObject(view) ? toStringArray(view.opponentBanished) : [];
+
+  const myBoardLike = dedupeIds([...myBoard, ...mySpellTrap, ...myField]);
+  const allBoardLike = dedupeIds([
+    ...myBoardLike,
+    ...opponentBoard,
+    ...opponentSpellTrap,
+    ...opponentField,
+  ]);
+  const allVisible = dedupeIds([
+    ...hand,
+    ...allBoardLike,
+    ...myGraveyard,
+    ...opponentGraveyard,
+    ...myBanished,
+    ...opponentBanished,
+  ]);
+
+  return {
+    hand,
+    myBoardLike,
+    opponentBoard,
+    allBoardLike,
+    allVisible,
+  };
+}
+
+function resolveLegacyCardId(
+  rawId: string,
+  options: {
+    definitionMap: Record<string, string>;
+    candidateIds: string[];
+    resolveMode: "deterministic" | "unique";
+    fieldName: string;
+    commandType: string;
+  },
+): string {
+  if (!rawId) return rawId;
+  if (options.definitionMap[rawId]) return rawId;
+
+  const matches = options.candidateIds.filter((instanceId) => {
+    return (
+      instanceId === rawId ||
+      options.definitionMap[instanceId] === rawId
+    );
+  });
+
+  if (matches.length === 0) {
+    return rawId;
+  }
+
+  if (options.resolveMode === "deterministic") {
+    return matches[0]!;
+  }
+
+  if (matches.length > 1) {
+    throw new ConvexError(
+      `Ambiguous legacy ${options.fieldName} "${rawId}" for ${options.commandType}; use canonical instance ID.`,
+    );
+  }
+
+  return matches[0]!;
+}
+
+function resolveLegacyCommandPayload(
+  commandJson: string,
+  viewJson: string | null,
+): string {
+  let parsedCommand: unknown;
+  try {
+    parsedCommand = JSON.parse(commandJson);
+  } catch {
+    throw new ConvexError("command must be valid JSON.");
+  }
+
+  const normalizedCommand = normalizeGameCommand(parsedCommand);
+  if (!isPlainObject(normalizedCommand)) {
+    throw new ConvexError("command must be an object.");
+  }
+
+  const command = { ...normalizedCommand } as Record<string, unknown>;
+  const commandType = typeof command.type === "string" ? command.type : null;
+  if (!commandType) {
+    throw new ConvexError("command.type is required.");
+  }
+
+  let parsedView: unknown = null;
+  if (typeof viewJson === "string") {
+    try {
+      parsedView = JSON.parse(viewJson);
+    } catch {
+      parsedView = null;
+    }
+  }
+
+  const definitionMap = getInstanceDefinitionMap(parsedView);
+  const zones = collectCommandResolutionZones(parsedView);
+
+  const resolveFromHand = (value: unknown, fieldName: string): string | undefined => {
+    if (typeof value !== "string") return undefined;
+    return resolveLegacyCardId(value, {
+      definitionMap,
+      candidateIds: zones.hand,
+      resolveMode: "deterministic",
+      fieldName,
+      commandType,
+    });
+  };
+
+  const resolveBoardLike = (value: unknown, fieldName: string): string | undefined => {
+    if (typeof value !== "string") return undefined;
+    return resolveLegacyCardId(value, {
+      definitionMap,
+      candidateIds: zones.allBoardLike,
+      resolveMode: "unique",
+      fieldName,
+      commandType,
+    });
+  };
+
+  const resolveOpponentBoard = (value: unknown, fieldName: string): string | undefined => {
+    if (typeof value !== "string") return undefined;
+    return resolveLegacyCardId(value, {
+      definitionMap,
+      candidateIds: zones.opponentBoard,
+      resolveMode: "unique",
+      fieldName,
+      commandType,
+    });
+  };
+
+  const resolveAnyVisibleTarget = (value: unknown, fieldName: string): string | undefined => {
+    if (typeof value !== "string") return undefined;
+    return resolveLegacyCardId(value, {
+      definitionMap,
+      candidateIds: zones.allVisible,
+      resolveMode: "unique",
+      fieldName,
+      commandType,
+    });
+  };
+
+  const resolveTargets = (fieldName: string) => {
+    if (!Array.isArray(command.targets)) return;
+    command.targets = command.targets.map((target, index) => {
+      if (typeof target !== "string") return target;
+      return resolveAnyVisibleTarget(target, `${fieldName}[${index}]`) ?? target;
+    });
+  };
+
+  switch (commandType) {
+    case "SUMMON":
+    case "SET_MONSTER":
+    case "SET_SPELL_TRAP": {
+      const resolved = resolveFromHand(command.cardId, "cardId");
+      if (resolved) command.cardId = resolved;
+      break;
+    }
+
+    case "ACTIVATE_SPELL": {
+      const rawCardId = typeof command.cardId === "string" ? command.cardId : null;
+      if (rawCardId) {
+        const resolvedFromHand = resolveFromHand(rawCardId, "cardId");
+        if (resolvedFromHand && resolvedFromHand !== rawCardId) {
+          command.cardId = resolvedFromHand;
+        } else {
+          const resolvedBoard = resolveBoardLike(rawCardId, "cardId");
+          if (resolvedBoard) command.cardId = resolvedBoard;
+        }
+      }
+      resolveTargets("targets");
+      break;
+    }
+
+    case "ACTIVATE_TRAP":
+    case "ACTIVATE_EFFECT":
+    case "FLIP_SUMMON":
+    case "CHANGE_POSITION": {
+      const resolved = resolveBoardLike(command.cardId, "cardId");
+      if (resolved) command.cardId = resolved;
+      resolveTargets("targets");
+      break;
+    }
+
+    case "DECLARE_ATTACK": {
+      const attackerId = resolveBoardLike(command.attackerId, "attackerId");
+      if (attackerId) command.attackerId = attackerId;
+
+      if (typeof command.targetId === "string") {
+        const targetId = resolveOpponentBoard(command.targetId, "targetId");
+        if (targetId) command.targetId = targetId;
+      }
+      break;
+    }
+
+    case "CHAIN_RESPONSE": {
+      const resolvedCardId = resolveBoardLike(command.cardId, "cardId");
+      if (resolvedCardId) command.cardId = resolvedCardId;
+      const resolvedSourceCardId = resolveBoardLike(command.sourceCardId, "sourceCardId");
+      if (resolvedSourceCardId) command.sourceCardId = resolvedSourceCardId;
+      resolveTargets("targets");
+      break;
+    }
+
+    default: {
+      resolveTargets("targets");
+      break;
+    }
+  }
+
+  return JSON.stringify(command);
+}
+
 async function submitActionForActor(
   ctx: any,
   args: {
@@ -1681,9 +1948,18 @@ async function submitActionForActor(
 ) {
   await requireSeatOwnership(ctx, args.matchId, args.seat, args.actorUserId);
 
+  const rawView = await match.getPlayerView(ctx, {
+    matchId: args.matchId,
+    seat: args.seat,
+  });
+  const resolvedCommand = resolveLegacyCommandPayload(
+    args.command,
+    typeof rawView === "string" ? rawView : null,
+  );
+
   const result = await match.submitAction(ctx, {
     matchId: args.matchId,
-    command: args.command,
+    command: resolvedCommand,
     seat: args.seat,
     expectedVersion: args.expectedVersion,
   });
@@ -1853,6 +2129,11 @@ function pickAICommand(
     typeof view?.maxBoardSlots === "number" ? view.maxBoardSlots : 3;
   const maxSpellTrapSlots =
     typeof view?.maxSpellTrapSlots === "number" ? view.maxSpellTrapSlots : 3;
+  const instanceDefinitions =
+    typeof view?.instanceDefinitions === "object" && view.instanceDefinitions !== null
+      ? (view.instanceDefinitions as Record<string, string>)
+      : {};
+  const resolveDefinitionId = (cardId: string) => instanceDefinitions[cardId] ?? cardId;
 
   // Draw/Standby/Breakdown/End phases → ADVANCE_PHASE
   if (
@@ -1868,7 +2149,7 @@ function pickAICommand(
   if (phase === "main" || phase === "main2") {
     // 1. Try to summon strongest monster from hand
     const monstersInHand = hand
-      .map((id: string) => ({ id, def: cardLookup[id] }))
+      .map((id: string) => ({ id, def: cardLookup[resolveDefinitionId(id)] }))
       .filter((c: any) => c.def?.cardType === "stereotype");
 
     if (monstersInHand.length > 0 && !normalSummonedThisTurn) {
@@ -1916,7 +2197,7 @@ function pickAICommand(
 
     // 2. Activate spell cards from hand if any
     const spellsInHand = hand
-      .map((id: string) => ({ id, def: cardLookup[id] }))
+      .map((id: string) => ({ id, def: cardLookup[resolveDefinitionId(id)] }))
       .filter((c: any) => c.def?.cardType === "spell");
     if (spellsInHand.length > 0) {
       return {
@@ -1927,7 +2208,7 @@ function pickAICommand(
 
     // 3. Set spells/traps if backrow has space
     const spellsTrapsInHand = hand
-      .map((id: string) => ({ id, def: cardLookup[id] }))
+      .map((id: string) => ({ id, def: cardLookup[resolveDefinitionId(id)] }))
       .filter(
         (c: any) => c.def?.cardType === "spell" || c.def?.cardType === "trap"
       );

@@ -198,6 +198,7 @@ export type ChainLink = {
 };
 
 export type PlayerView = {
+  instanceDefinitions: Record<string, string>;
   currentTurnPlayer: Seat;
   mySeat: Seat;
   currentPhase: "draw" | "standby" | "breakdown_check" | "main" | "main2" | "combat" | "end";

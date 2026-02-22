@@ -112,12 +112,15 @@ describe("Integration: Full Game Loop", () => {
       if (seat === "host") {
         // Summon attacker if available and no monster on board yet
         state = engine.getState();
+        const attackerInHand = state.hostHand.find(
+          (cardId) => state.instanceToDefinition[cardId] === "attacker",
+        );
         if (
-          state.hostHand.includes("attacker") &&
+          attackerInHand &&
           state.hostBoard.length === 0 &&
           !state.hostNormalSummonedThisTurn
         ) {
-          act({ type: "SUMMON", cardId: "attacker", position: "attack" }, "host");
+          act({ type: "SUMMON", cardId: attackerInHand, position: "attack" }, "host");
         }
 
         // Main → Combat

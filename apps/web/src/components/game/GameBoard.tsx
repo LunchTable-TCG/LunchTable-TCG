@@ -74,6 +74,10 @@ function buildTargetCandidates(
 ): TargetCandidate[] {
   if (!view || !filter) return [];
   const candidates: TargetCandidate[] = [];
+  const instanceDefinitions =
+    typeof view?.instanceDefinitions === "object" && view.instanceDefinitions !== null
+      ? (view.instanceDefinitions as Record<string, string>)
+      : {};
   const zone = filter.zone ?? "board";
   const owner = filter.owner ?? "opponent";
 
@@ -84,7 +88,7 @@ function buildTargetCandidates(
   ) => {
     for (const card of cards) {
       const id = card.cardId ?? card;
-      const defId = card.definitionId ?? id;
+      const defId = card.definitionId ?? instanceDefinitions[id] ?? id;
       candidates.push({
         cardId: id,
         definitionId: defId,
@@ -102,14 +106,20 @@ function buildTargetCandidates(
   } else if (zone === "graveyard") {
     if (owner === "opponent" || owner === "any") {
       addFromZone(
-        (view.opponentGraveyard ?? []).map((id: string) => ({ cardId: id, definitionId: id })),
+        (view.opponentGraveyard ?? []).map((id: string) => ({
+          cardId: id,
+          definitionId: instanceDefinitions[id] ?? id,
+        })),
         "opponent",
         "graveyard",
       );
     }
     if (owner === "self" || owner === "any") {
       addFromZone(
-        (view.graveyard ?? []).map((id: string) => ({ cardId: id, definitionId: id })),
+        (view.graveyard ?? []).map((id: string) => ({
+          cardId: id,
+          definitionId: instanceDefinitions[id] ?? id,
+        })),
         "player",
         "graveyard",
       );
@@ -117,7 +127,10 @@ function buildTargetCandidates(
   } else if (zone === "hand") {
     if (owner === "self" || owner === "any") {
       addFromZone(
-        (view.hand ?? []).map((id: string) => ({ cardId: id, definitionId: id })),
+        (view.hand ?? []).map((id: string) => ({
+          cardId: id,
+          definitionId: instanceDefinitions[id] ?? id,
+        })),
         "player",
         "hand",
       );
@@ -166,6 +179,7 @@ export function GameBoard({
     phase,
     gameOver,
     validActions,
+    parseError,
     isLoading,
     notFound,
     openPrompt,
@@ -209,6 +223,29 @@ export function GameBoard({
 
   pendingMatchEndRef.current = onMatchEnd;
 
+  const instanceDefinitions = view?.instanceDefinitions ?? {};
+  const resolveDefinitionId = useCallback(
+    (cardId: string | null | undefined, fallbackDefinitionId?: string | null) => {
+      if (!cardId && !fallbackDefinitionId) return undefined;
+      if (fallbackDefinitionId && fallbackDefinitionId !== "hidden") {
+        return fallbackDefinitionId;
+      }
+      if (cardId && instanceDefinitions[cardId]) {
+        return instanceDefinitions[cardId];
+      }
+      return cardId ?? undefined;
+    },
+    [instanceDefinitions],
+  );
+  const getDefinitionById = useCallback(
+    (cardId: string | null | undefined, fallbackDefinitionId?: string | null) => {
+      const definitionId = resolveDefinitionId(cardId, fallbackDefinitionId);
+      if (!definitionId) return undefined;
+      return cardLookup[definitionId];
+    },
+    [cardLookup, resolveDefinitionId],
+  );
+
   const chainOpponentCardName = (() => {
     if (activeChainLink?.cardId) {
       const cardInZones =
@@ -216,8 +253,10 @@ export function GameBoard({
         view?.spellTrapZone?.find((c: any) => c.cardId === activeChainLink.cardId) ??
         view?.opponentBoard?.find((c: any) => c.cardId === activeChainLink.cardId) ??
         view?.opponentSpellTrapZone?.find((c: any) => c.cardId === activeChainLink.cardId);
-      const definitionId = cardInZones?.definitionId ?? activeChainLink.cardId;
-      const definition = cardLookup[definitionId];
+      const definition = getDefinitionById(
+        activeChainLink.cardId,
+        cardInZones?.definitionId ?? null,
+      );
       if (definition?.name) return definition.name;
     }
 
@@ -245,10 +284,11 @@ export function GameBoard({
       const opponentCard =
         view?.opponentBoard?.find((c: any) => c.cardId === directCardId) ??
         view?.opponentSpellTrapZone?.find((c: any) => c.cardId === directCardId);
-      if (opponentCard?.definitionId) {
-        const definition = cardLookup[opponentCard.definitionId];
-        if (definition) return definition.name ?? "Opponent Card";
-      }
+      const definition = getDefinitionById(
+        directCardId,
+        opponentCard?.definitionId ?? null,
+      );
+      if (definition) return definition.name ?? "Opponent Card";
     }
 
     return "Opponent Card";
@@ -277,12 +317,12 @@ export function GameBoard({
       .map((entry: unknown) => {
         if (typeof entry === "string") {
           const stCard = view?.spellTrapZone?.find((st: any) => st.cardId === entry);
-          const definitionId = stCard?.definitionId ?? entry;
+          const definitionId = resolveDefinitionId(entry, stCard?.definitionId ?? null);
           return {
             cardId: entry,
             name: stCard?.faceDown
               ? "Set Trap"
-              : (cardLookup[definitionId]?.name ?? "Set Trap"),
+              : (definitionId ? cardLookup[definitionId]?.name : undefined) ?? "Set Trap",
           };
         }
 
@@ -294,7 +334,7 @@ export function GameBoard({
             ? entryObj.cardDefinitionId
             : typeof entryObj.definitionId === "string"
               ? entryObj.definitionId
-              : cardId;
+              : resolveDefinitionId(cardId, null);
         if (!cardId) return null;
 
         return {
@@ -450,7 +490,7 @@ export function GameBoard({
     if (!selectedHandCard) return;
 
     // Check if this spell has effects that require targets
-    const def = cardLookup[selectedHandCard];
+    const def = getDefinitionById(selectedHandCard, null);
     const spellName = def?.name ?? "Spell";
     const effectDef = def?.effects?.[0];
     if (effectDef?.targetFilter && (effectDef.targetCount ?? 0) > 0) {
@@ -668,8 +708,11 @@ export function GameBoard({
     // Player board cards that disappeared
     for (const id of prevBoardRef.current) {
       if (!currentPlayerIds.has(id)) {
-        const defId = playerBoard.find?.((c: any) => c.cardId === id)?.definitionId ?? id;
-        const name = cardLookup[defId]?.name ?? "Card";
+        const defId = resolveDefinitionId(
+          id,
+          playerBoard.find?.((c: any) => c.cardId === id)?.definitionId ?? null,
+        );
+        const name = (defId ? cardLookup[defId]?.name : undefined) ?? "Card";
         vfx.push("card_destroyed", { cardName: name }, 1200);
       }
     }
@@ -678,15 +721,15 @@ export function GameBoard({
     for (const id of prevOpponentBoardRef.current) {
       if (!currentOpponentIds.has(id)) {
         const prevCard = opponentBoard.find?.((c: any) => c.cardId === id);
-        const defId = prevCard?.definitionId ?? id;
-        const name = cardLookup[defId]?.name ?? "Card";
+        const defId = resolveDefinitionId(id, prevCard?.definitionId ?? null);
+        const name = (defId ? cardLookup[defId]?.name : undefined) ?? "Card";
         vfx.push("card_destroyed", { cardName: name }, 1200);
       }
     }
 
     prevBoardRef.current = currentPlayerIds;
     prevOpponentBoardRef.current = currentOpponentIds;
-  }, [playerBoard, opponentBoard, cardLookup, vfx]);
+  }, [playerBoard, opponentBoard, cardLookup, resolveDefinitionId, vfx]);
 
   const renderGameToText = useCallback(() => {
     if (!view) {
@@ -722,10 +765,10 @@ export function GameBoard({
         lifePoints: playerLP,
         deckCount: view.deckCount,
         handCount: hand.length,
-        hand: hand.map((cardId, handIndex) => ({
+          hand: hand.map((cardId, handIndex) => ({
           handIndex,
           cardId,
-          name: cardLookup[cardId]?.name ?? "Unknown",
+          name: getDefinitionById(cardId, null)?.name ?? "Unknown",
           playable: playableIds.has(cardId),
         })),
         board: serializeBoardLanes(playerBoard, cardLookup, MAX_BOARD_SLOTS),
@@ -783,6 +826,7 @@ export function GameBoard({
     cardLookup,
     chainActivatableTraps.length,
     ended,
+    getDefinitionById,
     hand,
     isChainPromptOpen,
     isLoading,
@@ -874,7 +918,12 @@ export function GameBoard({
   if (!view) {
     return (
       <div className="h-dvh flex flex-col items-center justify-center bg-[#1a1816]">
-        <p className="text-white/40 font-bold uppercase text-sm">Failed to load game state.</p>
+        <p className="text-white/40 font-bold uppercase text-sm">
+          {parseError ? "Game state parse error." : "Failed to load game state."}
+        </p>
+        {parseError && (
+          <p className="mt-2 max-w-md text-center text-xs text-white/30">{parseError}</p>
+        )}
         <div className="flex gap-3 mt-4">
           <button
             onClick={() => window.location.reload()}
@@ -1094,6 +1143,7 @@ export function GameBoard({
         <PlayerHand
           hand={hand}
           cardLookup={cardLookup}
+          instanceDefinitions={instanceDefinitions}
           playableIds={playableIds}
           onCardClick={handleHandCardClick}
         />
@@ -1178,7 +1228,7 @@ export function GameBoard({
       {/* Card Detail Overlay (hand card actions) */}
       {showActionSheet && selectedHandCard && (
         <CardDetailOverlay
-          cardDef={cardLookup[selectedHandCard] ?? {}}
+          cardDef={getDefinitionById(selectedHandCard, null) ?? {}}
           location="hand"
           phase={phase}
           isMyTurn={isMyTurn}
@@ -1232,7 +1282,9 @@ export function GameBoard({
       {showAttackTargets && selectedBoardCard && (() => {
         const targets = validActions.canAttack.get(selectedBoardCard) ?? [];
         const attackerCard = playerBoard.find((c: any) => c.cardId === selectedBoardCard);
-        const attackerDef = attackerCard ? cardLookup[attackerCard.definitionId] : null;
+        const attackerDef = attackerCard
+          ? getDefinitionById(attackerCard.cardId, attackerCard.definitionId)
+          : null;
         const attackerAtk = (attackerDef?.attack ?? 0) + (attackerCard?.temporaryBoosts?.attack ?? 0);
         const opponentTargets = opponentBoard
           .filter((c: any) => targets.includes(c.cardId))
@@ -1269,6 +1321,7 @@ export function GameBoard({
               : (showGraveyard.zone === "graveyard" ? opponentGraveyard : opponentBanished)
           }
           cardLookup={cardLookup}
+          instanceDefinitions={instanceDefinitions}
           onClose={() => setShowGraveyard(null)}
         />
       )}
@@ -1277,7 +1330,7 @@ export function GameBoard({
       {view.pendingPong && view.pendingPong.seat === seat && (
         <PongOverlay
           mode="combat"
-          cardName={cardLookup[view.pendingPong.destroyedCardId]?.name ?? "Unknown Card"}
+          cardName={getDefinitionById(view.pendingPong.destroyedCardId, null)?.name ?? "Unknown Card"}
           onResult={(result) => actions.pongShoot(view.pendingPong!.destroyedCardId, result)}
           onDecline={() => actions.pongDecline(view.pendingPong!.destroyedCardId)}
         />

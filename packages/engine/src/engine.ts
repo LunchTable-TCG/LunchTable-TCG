@@ -14,6 +14,11 @@ import { decideChainResponse } from "./rules/chain.js";
 import { resolveEffectActions, canActivateEffect, detectTriggerEffects, hasValidTargets, validateSelectedTargets, generateCostEvents } from "./rules/effects.js";
 import { applyContinuousEffects, removeContinuousEffectsForSource } from "./rules/continuous.js";
 import { expectDefined } from "./internal/invariant.js";
+import {
+  buildVisibleInstanceDefinitions,
+  getCardDefinition,
+  resolveDefinitionId,
+} from "./instanceIds.js";
 
 const assertNever = (value: never): never => {
   throw new Error(`Unreachable command/event: ${JSON.stringify(value)}`);
@@ -340,8 +345,25 @@ export function createInitialState(
   firstPlayer: Seat,
   rng?: () => number
 ): GameState {
-  const hostDeck = shuffle(hostDeckIds, rng);
-  const awayDeck = shuffle(awayDeckIds, rng);
+  const hostDeckInstances = hostDeckIds.map((definitionId, index) => ({
+    instanceId: `h:${index + 1}:${definitionId}`,
+    definitionId,
+  }));
+  const awayDeckInstances = awayDeckIds.map((definitionId, index) => ({
+    instanceId: `a:${index + 1}:${definitionId}`,
+    definitionId,
+  }));
+
+  const instanceToDefinition: Record<string, string> = {};
+  for (const card of hostDeckInstances) {
+    instanceToDefinition[card.instanceId] = card.definitionId;
+  }
+  for (const card of awayDeckInstances) {
+    instanceToDefinition[card.instanceId] = card.definitionId;
+  }
+
+  const hostDeck = shuffle(hostDeckInstances.map((card) => card.instanceId), rng);
+  const awayDeck = shuffle(awayDeckInstances.map((card) => card.instanceId), rng);
 
   const hostHand = hostDeck.slice(0, config.startingHandSize);
   const hostDeckRemaining = hostDeck.slice(config.startingHandSize);
@@ -352,6 +374,7 @@ export function createInitialState(
   return {
     config,
     cardLookup,
+    instanceToDefinition,
     hostId,
     awayId,
     hostHand,
@@ -437,6 +460,7 @@ export function mask(state: GameState, seat: Seat): PlayerView {
   const opponentBreakdownsCaused = isHost ? state.awayBreakdownsCaused : state.hostBreakdownsCaused;
 
   return {
+    instanceDefinitions: buildVisibleInstanceDefinitions(state, seat),
     hand: myHand,
     board: myBoard,
     spellTrapZone: mySpellTrapZone,
@@ -592,7 +616,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
       const faceUpMonsters = board.filter((c) => !c.faceDown);
 
       for (const cardId of hand) {
-        const card = state.cardLookup[cardId];
+        const card = getCardDefinition(state, cardId);
         if (!card || card.type !== "stereotype") continue;
 
         const level = card.level ?? 0;
@@ -657,7 +681,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
     // SET_SPELL_TRAP moves
     if (spellTrapZone.length < state.config.maxSpellTrapSlots) {
       for (const cardId of hand) {
-        const card = state.cardLookup[cardId];
+        const card = getCardDefinition(state, cardId);
         if (!card || (card.type !== "spell" && card.type !== "trap")) continue;
 
         moves.push({
@@ -669,7 +693,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
 
     // ACTIVATE_SPELL moves (from hand or face-down set spells)
     for (const cardId of hand) {
-      const card = state.cardLookup[cardId];
+      const card = getCardDefinition(state, cardId);
       if (!card || card.type !== "spell") continue;
 
       // Check if we have room in spell/trap zone (unless it's a field spell)
@@ -698,7 +722,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
         // Need at least one monster in hand that could be ritual summoned
         const monstersInHand = hand.filter((hId) => {
           if (hId === cardId) return false; // Skip the ritual spell itself
-          const def = state.cardLookup[hId];
+          const def = getCardDefinition(state, hId);
           return def && def.type === "stereotype";
         });
         if (monstersInHand.length === 0) continue;
@@ -715,7 +739,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
         }, 0);
 
         const hasValidRitual = monstersInHand.some((mId) => {
-          const mDef = state.cardLookup[mId];
+          const mDef = getCardDefinition(state, mId);
           return mDef && (mDef.level ?? 0) <= totalTributeLevel;
         });
 
@@ -1299,6 +1323,7 @@ export function evolve(
 
       case "SPECIAL_SUMMONED": {
         const { cardId, from, seat } = event;
+        const definitionId = resolveDefinitionId(newState, cardId);
         const normalizedFrom = from === "spellTrapZone" ? "spell_trap_zone" : from;
 
         const removeFromZone = (owner: Seat) => {
@@ -1376,7 +1401,7 @@ export function evolve(
 
         const newCard: BoardCard = {
           cardId,
-          definitionId: event.cardId,
+          definitionId,
           position: event.position,
           faceDown: false,
           canAttack: false,
@@ -1440,7 +1465,7 @@ export function evolve(
 
       case "EFFECT_ACTIVATED": {
         const { effectIndex, cardId } = event;
-        const cardDef = newState.cardLookup[cardId];
+        const cardDef = getCardDefinition(newState, cardId);
         const eff = cardDef?.effects?.[effectIndex];
         if (!eff) break;
 
@@ -1555,7 +1580,7 @@ export function evolve(
           };
 
           // Reverse stat modifiers from the equip and remove from equippedCards
-          const equipDef = newState.cardLookup[cardId];
+          const equipDef = getCardDefinition(newState, cardId);
           const board = [...newState[boardKey]];
           for (let i = 0; i < board.length; i++) {
             const monster = board[i];
@@ -1643,6 +1668,7 @@ export function evolve(
 
       case "RITUAL_SUMMONED": {
         const { seat, cardId } = event;
+        const definitionId = resolveDefinitionId(newState, cardId);
         const isHost = seat === "host";
 
         // Remove ritual monster from hand
@@ -1657,7 +1683,7 @@ export function evolve(
         // Add to board as face-up attack position BoardCard
         const newCard: BoardCard = {
           cardId,
-          definitionId: cardId,
+          definitionId,
           position: "attack",
           faceDown: false,
           canAttack: false,

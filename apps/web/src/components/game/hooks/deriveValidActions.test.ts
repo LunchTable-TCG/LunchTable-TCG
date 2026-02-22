@@ -146,6 +146,29 @@ describe("deriveValidActions: returns empty when disabled", () => {
   });
 });
 
+describe("deriveValidActions: instanceDefinitions", () => {
+  it("uses instanceDefinitions for hand cards", () => {
+    const view = makeView({
+      hand: ["h:1:monster_1"],
+      instanceDefinitions: {
+        "h:1:monster_1": "monster_1",
+      },
+    });
+
+    const result = deriveValidActions({
+      view,
+      cardLookup,
+      isMyTurn: true,
+      isChainWindow: false,
+      isChainResponder: false,
+      gameOver: false,
+    });
+
+    expect(result.canSummon.has("h:1:monster_1")).toBe(true);
+    expect(result.canSetMonster.has("h:1:monster_1")).toBe(true);
+  });
+});
+
 describe("deriveValidActions: canActivateEffect", () => {
   it("populates canActivateEffect for face-up board monster with ignition effect", () => {
     const view = makeView({

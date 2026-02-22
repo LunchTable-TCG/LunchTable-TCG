@@ -3,6 +3,7 @@ import { mutation } from "./_generated/server";
 import { decide, evolve } from "@lunchtable/engine";
 import { DEFAULT_CONFIG } from "@lunchtable/engine";
 import type { GameState, Command, Seat, EngineEvent, EngineConfig } from "@lunchtable/engine";
+import { ensureInstanceMapping } from "./stateCompatibility";
 
 // ---------------------------------------------------------------------------
 // Shared validators
@@ -146,11 +147,11 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isValidInitialCardDefinition(cardId: string, def: unknown): boolean {
+function isValidInitialCardDefinition(definitionId: string, def: unknown): boolean {
   if (!isRecord(def)) return false;
 
   // Hard requirements that prevent trivial tampering.
-  if (def.id !== cardId) return false;
+  if (def.id !== definitionId) return false;
   if (!isNonEmptyString(def.name)) return false;
 
   const type = def.type;
@@ -273,30 +274,44 @@ export function assertInitialStateIntegrity(
     throw new Error("initialState must not be game over");
   }
 
+  const instanceToDefinition = state.instanceToDefinition;
+  if (!instanceToDefinition || typeof instanceToDefinition !== "object") {
+    throw new Error("initialState.instanceToDefinition is required");
+  }
+
   const expectedHostDeck = match.hostDeck ?? [];
   const expectedAwayDeck = match.awayDeck ?? [];
   const actualHostCards = [...state.hostHand, ...state.hostDeck];
   const actualAwayCards = [...state.awayHand, ...state.awayDeck];
-  if (!haveSameCardCounts(expectedHostDeck, actualHostCards)) {
-    throw new Error("initialState host deck/hand does not match match.hostDeck");
-  }
-  if (!haveSameCardCounts(expectedAwayDeck, actualAwayCards)) {
-    throw new Error("initialState away deck/hand does not match match.awayDeck");
-  }
 
   if (!state.cardLookup || typeof state.cardLookup !== "object") {
     throw new Error("initialState.cardLookup is required");
   }
 
   const allReferencedCards = [...actualHostCards, ...actualAwayCards];
-  for (const cardId of allReferencedCards) {
-    const def = (state.cardLookup as any)[cardId] as unknown;
+  const resolvedDefinitions = new Map<string, string>();
+  for (const instanceId of allReferencedCards) {
+    const mappedDefinitionId = instanceToDefinition[instanceId];
+    if (!mappedDefinitionId) {
+      throw new Error(`initialState.instanceToDefinition missing mapping for ${instanceId}`);
+    }
+    resolvedDefinitions.set(instanceId, mappedDefinitionId);
+    const def = (state.cardLookup as any)[mappedDefinitionId] as unknown;
     if (!def) {
-      throw new Error(`initialState.cardLookup missing definition for ${cardId}`);
+      throw new Error(`initialState.cardLookup missing definition for ${mappedDefinitionId}`);
     }
-    if (!isValidInitialCardDefinition(cardId, def)) {
-      throw new Error(`initialState.cardLookup has invalid definition for ${cardId}`);
+    if (!isValidInitialCardDefinition(mappedDefinitionId, def)) {
+      throw new Error(`initialState.cardLookup has invalid definition for ${mappedDefinitionId}`);
     }
+  }
+
+  const actualHostDefinitions = actualHostCards.map((cardId) => resolvedDefinitions.get(cardId) ?? cardId);
+  const actualAwayDefinitions = actualAwayCards.map((cardId) => resolvedDefinitions.get(cardId) ?? cardId);
+  if (!haveSameCardCounts(expectedHostDeck, actualHostDefinitions)) {
+    throw new Error("initialState host deck/hand does not match match.hostDeck");
+  }
+  if (!haveSameCardCounts(expectedAwayDeck, actualAwayDefinitions)) {
+    throw new Error("initialState away deck/hand does not match match.awayDeck");
   }
 }
 
@@ -437,7 +452,7 @@ export const startMatch = mutation({
     await ctx.db.insert("matchSnapshots", {
       matchId: args.matchId,
       version: 0,
-      state: args.initialState,
+      state: JSON.stringify(parsedInitialState),
       createdAt: Date.now(),
     });
 
@@ -545,6 +560,7 @@ export const submitAction = mutation({
     } catch {
       throw new Error("Failed to parse snapshot state");
     }
+    state = ensureInstanceMapping(state);
 
     // -----------------------------------------------------------------------
     // 4. Parse command

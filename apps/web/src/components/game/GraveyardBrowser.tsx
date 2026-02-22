@@ -5,6 +5,7 @@ interface GraveyardBrowserProps {
   title: string;
   cardIds: string[];
   cardLookup: Record<string, any>;
+  instanceDefinitions?: Record<string, string>;
   onClose: () => void;
 }
 
@@ -12,6 +13,7 @@ export function GraveyardBrowser({
   title,
   cardIds,
   cardLookup,
+  instanceDefinitions,
   onClose,
 }: GraveyardBrowserProps) {
   return (
@@ -65,7 +67,8 @@ export function GraveyardBrowser({
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cardIds.map((cardId, index) => {
-                  const def = cardLookup[cardId];
+                  const definitionId = instanceDefinitions?.[cardId] ?? cardId;
+                  const def = cardLookup[definitionId];
                   const theme = getArchetypeTheme(def?.archetype);
 
                   const cardType =

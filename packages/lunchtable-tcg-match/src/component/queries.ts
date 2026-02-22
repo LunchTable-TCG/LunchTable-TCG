@@ -3,6 +3,7 @@ import { query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { mask } from "@lunchtable/engine";
 import type { GameState, Seat } from "@lunchtable/engine";
+import { ensureInstanceMapping } from "./stateCompatibility";
 
 const vSeat = v.union(v.literal("host"), v.literal("away"));
 
@@ -109,7 +110,7 @@ export const getPlayerView = query({
 
     if (!snapshot) return null;
 
-    const state = JSON.parse(snapshot.state) as GameState;
+    const state = ensureInstanceMapping(JSON.parse(snapshot.state) as GameState);
     const playerView = mask(state, args.seat as Seat);
     return JSON.stringify(playerView);
   },

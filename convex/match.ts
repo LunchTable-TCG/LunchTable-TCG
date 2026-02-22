@@ -1,10 +1,11 @@
 import { LTCGMatch } from "@lunchtable/match";
 import { LTCGCards } from "@lunchtable/cards";
+import { buildCardLookup, createInitialState, DEFAULT_CONFIG } from "@lunchtable/engine";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./auth";
-import { buildCardLookup, createInitialState, DEFAULT_CONFIG } from "@lunchtable/engine";
+import { buildMatchSeed, makeRng } from "./agentSeed";
 
 const match: any = new LTCGMatch(components.lunchtable_tcg_match as any);
 const cards: any = new LTCGCards(components.lunchtable_tcg_cards as any);
@@ -86,20 +87,36 @@ export const startMatch = mutation({
       throw new Error("Only the host can start the match");
     }
 
+    const hostDeck = Array.isArray(meta.hostDeck) ? meta.hostDeck : [];
+    const awayDeck = Array.isArray(meta.awayDeck) ? meta.awayDeck : [];
     if (!meta.awayId) {
       throw new Error("Cannot start match until away seat is filled");
+    }
+    if (hostDeck.length === 0 || awayDeck.length === 0) {
+      throw new Error("Both players must have decks before starting the match");
     }
 
     const allCards = await cards.cards.getAllCards(ctx);
     const cardLookup = buildCardLookup(Array.isArray(allCards) ? allCards : []);
+    const seed = buildMatchSeed([
+      "convex.match.startMatch",
+      meta.hostId,
+      meta.awayId,
+      hostDeck.length,
+      awayDeck.length,
+      hostDeck[0],
+      awayDeck[0],
+    ]);
+    const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
     const initialState = createInitialState(
       cardLookup,
       DEFAULT_CONFIG,
       meta.hostId,
       meta.awayId,
-      meta.hostDeck,
-      meta.awayDeck ?? [],
-      "host",
+      hostDeck,
+      awayDeck,
+      firstPlayer,
+      makeRng(seed),
     );
 
     return match.startMatch(ctx, {
