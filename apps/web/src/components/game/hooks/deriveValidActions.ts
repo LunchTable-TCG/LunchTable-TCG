@@ -44,6 +44,7 @@ export function deriveValidActions(params: {
   const hand = view.hand ?? [];
   const stZone = view.spellTrapZone ?? [];
   const opponentBoard = view.opponentBoard ?? [];
+  const instanceDefinitions = view.instanceDefinitions ?? {};
   const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
 
   // ── During chain window, only the responder can act ──
@@ -96,7 +97,8 @@ export function deriveValidActions(params: {
   if (isMainPhase) {
     if (!alreadyNormalSummoned) {
       for (const cardId of hand) {
-        const card = cardLookup[cardId];
+        const definitionId = instanceDefinitions[cardId] ?? cardId;
+        const card = cardLookup[definitionId];
         if (!card) continue;
         if (card.cardType === "stereotype" || card.type === "stereotype") {
           const level = card.level ?? 0;
@@ -116,7 +118,8 @@ export function deriveValidActions(params: {
 
     if (stZone.length < maxSpellTrapSlots) {
       for (const cardId of hand) {
-        const card = cardLookup[cardId];
+        const definitionId = instanceDefinitions[cardId] ?? cardId;
+        const card = cardLookup[definitionId];
         if (!card) continue;
         if (card.cardType === "spell" || card.type === "spell") {
           va.canSetSpellTrap.add(cardId);

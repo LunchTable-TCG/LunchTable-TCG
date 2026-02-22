@@ -68,6 +68,13 @@ export interface LingeringEffect {
 export interface GameState {
   config: EngineConfig;
   cardLookup: Record<string, CardDefinition>;
+  /**
+   * Canonical card instance ID -> card definition ID mapping.
+   *
+   * New snapshots populate this for every card copy in both decks and all zones.
+   * Legacy snapshots may omit it and are upgraded by host-layer compatibility logic.
+   */
+  instanceToDefinition: Record<string, string>;
   hostId: string;
   awayId: string;
   hostHand: string[];
@@ -112,6 +119,8 @@ export interface GameState {
 }
 
 export interface PlayerView {
+  /** Visible instance IDs mapped to canonical definition IDs for this viewer. */
+  instanceDefinitions: Record<string, string>;
   hand: string[];
   board: BoardCard[];
   spellTrapZone: SpellTrapCard[];

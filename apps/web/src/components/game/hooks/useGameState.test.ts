@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PlayerView } from "../../../lib/convexTypes";
 
 import { deriveValidActions } from "./deriveValidActions";
+import { parsePlayerView } from "./useGameState";
 
 describe("deriveValidActions", () => {
   it("suppresses summon/set monster actions when monster board is full", () => {
@@ -374,5 +375,57 @@ describe("deriveValidActions", () => {
     expect(result.canSetMonster.size).toBe(0);
     expect(result.canSetSpellTrap.size).toBe(0);
     expect(result.canAttack.get("board-monster")).toEqual(["op-monster"]);
+  });
+});
+
+describe("parsePlayerView", () => {
+  it("sets parseError on invalid view JSON", () => {
+    const parsed = parsePlayerView("{not-valid-json");
+    expect(parsed.view).toBeNull();
+    expect(parsed.parseError).toContain("Failed to parse");
+  });
+
+  it("parses instanceDefinitions map", () => {
+    const parsed = parsePlayerView(
+      JSON.stringify({
+        hand: ["h:1:monster"],
+        board: [],
+        spellTrapZone: [],
+        fieldSpell: null,
+        graveyard: [],
+        banished: [],
+        lifePoints: 8000,
+        deckCount: 35,
+        breakdownsCaused: 0,
+        opponentHandCount: 5,
+        opponentBoard: [],
+        opponentSpellTrapZone: [],
+        opponentFieldSpell: null,
+        opponentGraveyard: [],
+        opponentBanished: [],
+        opponentLifePoints: 8000,
+        opponentDeckCount: 35,
+        opponentBreakdownsCaused: 0,
+        currentTurnPlayer: "host",
+        currentPriorityPlayer: null,
+        turnNumber: 1,
+        currentPhase: "draw",
+        currentChain: [],
+        normalSummonedThisTurn: false,
+        maxBoardSlots: 3,
+        maxSpellTrapSlots: 3,
+        mySeat: "host",
+        gameOver: false,
+        winner: null,
+        winReason: null,
+        pendingPong: null,
+        pendingRedemption: null,
+        instanceDefinitions: {
+          "h:1:monster": "monster_def",
+        },
+      }),
+    );
+    expect(parsed.parseError).toBeNull();
+    expect(parsed.view?.instanceDefinitions["h:1:monster"]).toBe("monster_def");
   });
 });

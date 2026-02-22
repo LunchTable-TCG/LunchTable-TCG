@@ -6,7 +6,9 @@ import {
   getDeckCardIdsFromDeckData,
   findStageByNumber,
   normalizeFirstClearBonus,
+  __test as gameTestHelpers,
 } from "../game";
+import { buildMatchSeed } from "../agentSeed";
 
 // ═══════════════════════════════════════════════════════════════════════
 // game.ts integration tests
@@ -3484,5 +3486,146 @@ describe("spectator queries edge cases", () => {
     expect(result).toHaveProperty("page");
     expect(result).toHaveProperty("isDone");
     expect(result).toHaveProperty("continueCursor");
+  });
+});
+
+// ── Section 39: Determinism + legacy command compatibility ──────────
+
+describe("deterministic start + legacy command resolution", () => {
+  test("startMatch_deterministic_first_player_for_pvp_join", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+
+    const { asAlice, matchId } = await createActivePvpMatch(t);
+    const meta = (await asAlice.query(api.game.getMatchMeta, { matchId })) as any;
+    const hostViewRaw = await asAlice.query(api.game.getPlayerView, { matchId, seat: "host" });
+    const hostView = JSON.parse(hostViewRaw as string) as any;
+
+    const seed = buildMatchSeed([
+      "pvpLobbyJoin",
+      meta.hostId,
+      meta.awayId,
+      meta.hostDeck.length,
+      meta.awayDeck.length,
+      meta.hostDeck[0],
+      meta.awayDeck[0],
+    ]);
+    const expectedFirstPlayer = seed % 2 === 0 ? "host" : "away";
+    expect(hostView.currentTurnPlayer).toBe(expectedFirstPlayer);
+  });
+
+  test("agentJoinMatch_deterministic_first_player", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+
+    const { asUser: asAlice } = await seedUserWithDeck(t, ALICE);
+    await seedUserWithDeck(t, BOB);
+
+    const lobby = await asAlice.mutation(api.game.createPvpLobby, {});
+
+    const aliceUser = await t.run(async (ctx) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) => q.eq("privyId", ALICE.subject))
+        .first(),
+    );
+    const bobUser = await t.run(async (ctx) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) => q.eq("privyId", BOB.subject))
+        .first(),
+    );
+
+    await t.mutation(api.agentAuth.agentJoinMatch, {
+      agentUserId: bobUser!._id,
+      matchId: lobby.matchId,
+    });
+
+    const meta = await asAlice.query(api.game.getMatchMeta, { matchId: lobby.matchId }) as any;
+    const hostViewRaw = await asAlice.query(api.game.getPlayerView, {
+      matchId: lobby.matchId,
+      seat: "host",
+    });
+    const hostView = JSON.parse(hostViewRaw as string) as any;
+    const seed = buildMatchSeed([
+      "agentJoinMatch",
+      String(meta.hostId),
+      String(bobUser!._id),
+      meta.hostDeck.length,
+      meta.awayDeck.length,
+      meta.hostDeck[0],
+      meta.awayDeck[0],
+    ]);
+    const expectedFirstPlayer = seed % 2 === 0 ? "host" : "away";
+    expect(hostView.currentTurnPlayer).toBe(expectedFirstPlayer);
+    expect(String(meta.hostId)).toBe(String(aliceUser!._id));
+  });
+
+  test("rejects ambiguous legacy board id commands", async () => {
+    const duplicateDefinitionId = "dup_monster_def";
+    const viewJson = JSON.stringify({
+      hand: [],
+      board: [
+        { cardId: "h:1:dup_monster_def", definitionId: duplicateDefinitionId, faceDown: false },
+        { cardId: "h:2:dup_monster_def", definitionId: duplicateDefinitionId, faceDown: false },
+      ],
+      spellTrapZone: [],
+      fieldSpell: null,
+      graveyard: [],
+      banished: [],
+      opponentBoard: [],
+      opponentSpellTrapZone: [],
+      opponentFieldSpell: null,
+      opponentGraveyard: [],
+      opponentBanished: [],
+      instanceDefinitions: {
+        "h:1:dup_monster_def": duplicateDefinitionId,
+        "h:2:dup_monster_def": duplicateDefinitionId,
+      },
+    });
+
+    expect(() =>
+      gameTestHelpers.resolveLegacyCommandPayload(
+        JSON.stringify({
+          type: "CHANGE_POSITION",
+          cardId: duplicateDefinitionId,
+        }),
+        viewJson,
+      ),
+    ).toThrow(/Ambiguous legacy cardId/);
+  });
+
+  test("legacy hand definition id command resolves deterministically", async () => {
+    const duplicateDefinitionId = "dup_monster_def";
+    const firstInstance = "h:1:dup_monster_def";
+    const secondInstance = "h:2:dup_monster_def";
+    const viewJson = JSON.stringify({
+      hand: [firstInstance, secondInstance],
+      board: [],
+      spellTrapZone: [],
+      fieldSpell: null,
+      graveyard: [],
+      banished: [],
+      opponentBoard: [],
+      opponentSpellTrapZone: [],
+      opponentFieldSpell: null,
+      opponentGraveyard: [],
+      opponentBanished: [],
+      instanceDefinitions: {
+        [firstInstance]: duplicateDefinitionId,
+        [secondInstance]: duplicateDefinitionId,
+      },
+    });
+
+    const resolvedCommand = gameTestHelpers.resolveLegacyCommandPayload(
+      JSON.stringify({
+        type: "SUMMON",
+        cardId: duplicateDefinitionId,
+        position: "attack",
+      }),
+      viewJson,
+    );
+    const parsed = JSON.parse(resolvedCommand) as Record<string, unknown>;
+    expect(parsed.cardId).toBe(firstInstance);
   });
 });

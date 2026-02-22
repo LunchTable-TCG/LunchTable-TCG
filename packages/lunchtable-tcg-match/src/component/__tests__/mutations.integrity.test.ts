@@ -17,6 +17,14 @@ function makeInitialState(overrides: Partial<GameState> = {}): GameState {
       a2: { id: "a2", name: "Away Deck 1", type: "stereotype", attack: 800, defense: 1000, level: 4 },
       a3: { id: "a3", name: "Away Deck 2", type: "stereotype", attack: 700, defense: 900, level: 3 },
     },
+    instanceToDefinition: {
+      "h:1:h1": "h1",
+      "h:2:h2": "h2",
+      "h:3:h3": "h3",
+      "a:1:a1": "a1",
+      "a:2:a2": "a2",
+      "a:3:a3": "a3",
+    },
     hostId: "host-user",
     awayId: "away-user",
     gameStarted: true,
@@ -42,10 +50,10 @@ function makeInitialState(overrides: Partial<GameState> = {}): GameState {
     awayBreakdownsCaused: 0,
     hostFieldSpell: null,
     awayFieldSpell: null,
-    hostHand: ["h1"],
-    hostDeck: ["h2", "h3"],
-    awayHand: ["a1"],
-    awayDeck: ["a2", "a3"],
+    hostHand: ["h:1:h1"],
+    hostDeck: ["h:2:h2", "h:3:h3"],
+    awayHand: ["a:1:a1"],
+    awayDeck: ["a:2:a2", "a:3:a3"],
     hostBoard: [],
     awayBoard: [],
     hostSpellTrapZone: [],
@@ -54,6 +62,9 @@ function makeInitialState(overrides: Partial<GameState> = {}): GameState {
     awayGraveyard: [],
     hostBanished: [],
     awayBanished: [],
+    pendingPong: null,
+    pendingRedemption: null,
+    redemptionUsed: { host: false, away: false },
   };
 
   return {
@@ -164,7 +175,7 @@ describe("assertInitialStateIntegrity", () => {
 
   it("rejects deck/hand multiset mismatches", () => {
     const state = makeInitialState({
-      hostDeck: ["h2"],
+      hostDeck: ["h:2:h2"],
     });
     expect(() => assertInitialStateIntegrity(match, state)).toThrow(
       "initialState host deck/hand does not match match.hostDeck",
@@ -197,6 +208,17 @@ describe("assertInitialStateIntegrity", () => {
     } as unknown as Partial<GameState>);
     expect(() => assertInitialStateIntegrity(match, state)).toThrow(
       "initialState.cardLookup missing definition for h2",
+    );
+  });
+
+  it("rejects missing instance mapping for referenced cards", () => {
+    const state = makeInitialState({
+      instanceToDefinition: {
+        "h:1:h1": "h1",
+      },
+    } as unknown as Partial<GameState>);
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
+      "initialState.instanceToDefinition missing mapping for h:2:h2",
     );
   });
 

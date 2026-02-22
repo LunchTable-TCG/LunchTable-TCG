@@ -130,6 +130,7 @@ export const agentStartBattle = mutation({
       playerDeck[0],
       finalAiDeck[0],
     ]);
+    const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
     const initialState = createInitialState(
       cardLookup,
@@ -138,7 +139,7 @@ export const agentStartBattle = mutation({
       "cpu",
       playerDeck,
       finalAiDeck,
-      "host",
+      firstPlayer,
       makeRng(seed),
     );
 
@@ -194,6 +195,7 @@ export const agentStartDuel = mutation({
       playerDeck[0],
       aiDeck[0],
     ]);
+    const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
     const initialState = createInitialState(
       cardLookup,
@@ -202,7 +204,7 @@ export const agentStartDuel = mutation({
       "cpu",
       playerDeck,
       aiDeck,
-      "host",
+      firstPlayer,
       makeRng(seed),
     );
 
@@ -275,17 +277,16 @@ export const agentJoinMatch = mutation({
     const allCards = await cards.cards.getAllCards(ctx);
     const cardLookup = buildCardLookup(allCards as any);
 
-    const firstPlayer: "host" | "away" = Math.random() < 0.5 ? "host" : "away";
     const seed = buildMatchSeed([
       "agentJoinMatch",
       hostId,
       agentUserId,
-      firstPlayer,
       hostDeck.length,
       awayDeck.length,
       hostDeck[0],
       awayDeck[0],
     ]);
+    const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
     const initialState = createInitialState(
       cardLookup,

@@ -42,7 +42,9 @@ export function useGameState(matchId: string | undefined, seat: Seat, actorUserI
 
   const allCards = useConvexQuery(api.game.getAllCards, {}) as CardDefinition[] | undefined;
 
-  const view = useMemo<PlayerView | null>(() => parsePlayerView(viewJson), [viewJson]);
+  const parsedViewResult = useMemo(() => parsePlayerView(viewJson), [viewJson]);
+  const view = parsedViewResult.view;
+  const parseError = parsedViewResult.parseError;
 
   const openPrompt = useMemo<ParsedOpenPrompt | null>(
     () => parseOpenPrompt(openPromptRaw),
@@ -95,6 +97,7 @@ export function useGameState(matchId: string | undefined, seat: Seat, actorUserI
     phase,
     gameOver,
     validActions,
+    parseError,
     isLoading:
       meta === undefined ||
       viewJson === undefined ||
@@ -104,17 +107,21 @@ export function useGameState(matchId: string | undefined, seat: Seat, actorUserI
   };
 }
 
-function parsePlayerView(value: string | null | undefined): PlayerView | null {
-  if (!value) return null;
+export function parsePlayerView(
+  value: string | null | undefined,
+): { view: PlayerView | null; parseError: string | null } {
+  if (!value) return { view: null, parseError: null };
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
   } catch {
-    return null;
+    return { view: null, parseError: "Failed to parse game state payload." };
   }
 
-  if (!isRecord(parsed)) return null;
+  if (!isRecord(parsed)) {
+    return { view: null, parseError: "Game state payload is invalid." };
+  }
 
   const currentTurnPlayer = asSeat(parsed.currentTurnPlayer) ?? "host";
   const mySeat = asSeat(parsed.mySeat) ?? currentTurnPlayer;
@@ -138,6 +145,9 @@ function parsePlayerView(value: string | null | undefined): PlayerView | null {
   const winner = asSeat(parsed.winner);
 
   return {
+    parseError: null,
+    view: {
+      instanceDefinitions: toStringMap(parsed.instanceDefinitions),
     hand: toStringArray(parsed.hand),
     board: normalizeBoardCards(parsed.board),
     spellTrapZone: normalizeSpellTrapCards(parsed.spellTrapZone),
@@ -173,6 +183,7 @@ function parsePlayerView(value: string | null | undefined): PlayerView | null {
     players,
     turnPlayer: asSeat(parsed.turnPlayer) ?? currentTurnPlayer,
     gameResult: typeof parsed.gameResult === "string" ? parsed.gameResult : undefined,
+    },
   };
 }
 
@@ -317,6 +328,17 @@ function normalizeLifePointMap(value: unknown): Record<Seat, number> | null {
   const away = toFiniteNumber(value.away);
   if (host === null || away === null) return null;
   return { host, away };
+}
+
+function toStringMap(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const map: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") {
+      map[key] = entry;
+    }
+  }
+  return map;
 }
 
 function lifeFromPlayers(
