@@ -125,6 +125,7 @@ export function decideActivateSpell(
     const ritualMonsterId = targets[0];
     if (!ritualMonsterId) return events;
     const tributeIds = targets.slice(1);
+    if (new Set(tributeIds).size !== tributeIds.length) return events;
 
     // Ritual monster must be in hand
     if (!zones.hand.includes(ritualMonsterId)) return events;
