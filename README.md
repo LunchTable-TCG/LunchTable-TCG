@@ -57,6 +57,32 @@ bash .agents/skills/ltcg-complete-setup/scripts/bootstrap.sh \
   --live-runs 3
 ```
 
+### Worktree Automation (Pinned Path)
+
+Use this for schedulers/agents that must target one exact checkout:
+
+```bash
+bash /Users/home/.codex/worktrees/77c3/LTCG-v2/scripts/run-worktree-automation.sh \
+  --worktree /Users/home/.codex/worktrees/77c3/LTCG-v2 \
+  --deployment scintillating-mongoose-458 \
+  --live-runs 3
+```
+
+When already inside the target worktree, you can use:
+
+```bash
+bun run setup:worktree:auto -- --worktree "$(pwd)"
+```
+
+This flow writes `artifacts/automation/worktree.env` in the target worktree.
+Automations can source it before running game agents:
+
+```bash
+set -a
+source /Users/home/.codex/worktrees/77c3/LTCG-v2/artifacts/automation/worktree.env
+set +a
+```
+
 ### Local Agent Access (No Privy Login)
 
 For local automation and agent-driven testing, use the API-key path instead of weakening Privy auth:

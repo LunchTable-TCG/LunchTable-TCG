@@ -86,6 +86,32 @@ LTCG_NO_BROWSER=1 \
 bun run test:live:core
 ```
 
+## Worktree Automation Recipe
+
+For automation that must run against a specific worktree path, bootstrap first:
+
+```bash
+bash /Users/home/.codex/worktrees/77c3/LTCG-v2/scripts/run-worktree-automation.sh \
+  --worktree /Users/home/.codex/worktrees/77c3/LTCG-v2 \
+  --deployment scintillating-mongoose-458 \
+  --live-runs 3
+```
+
+Then source the generated env profile:
+
+```bash
+set -a
+source /Users/home/.codex/worktrees/77c3/LTCG-v2/artifacts/automation/worktree.env
+set +a
+```
+
+The env file contains:
+- `LTCG_WORKTREE_PATH`
+- `CONVEX_DEPLOYMENT`
+- `VITE_CONVEX_URL`
+- `LTCG_API_URL`
+- `LTCG_LIVE_REQUIRED`
+
 ## CI Notes
 
 The spectator UI receives the agent API key via `postMessage` and validates the message origin.
