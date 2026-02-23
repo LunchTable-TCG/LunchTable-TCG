@@ -55,14 +55,23 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <ConvexProvider client={convexQueryClient.convexClient}>
             <div className="p-4 flex flex-col gap-4">
               <header className="flex items-center justify-between border-b border-stone-700/30 pb-2">
-                <Link
-                  to="/"
-                  activeProps={{ className: 'font-bold' }}
-                  activeOptions={{ exact: true }}
-                  className="text-lg"
-                >
-                  LTCG TanStack Migration
-                </Link>
+                <div className="flex items-center gap-4">
+                  <Link
+                    to="/"
+                    activeProps={{ className: 'font-bold' }}
+                    activeOptions={{ exact: true }}
+                    className="text-lg"
+                  >
+                    LTCG TanStack Migration
+                  </Link>
+                  <Link
+                    to="/cards"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    Cards
+                  </Link>
+                </div>
                 <span
                   className={`text-xs uppercase tracking-wide ${
                     convexConfigured ? 'text-emerald-400' : 'text-amber-400'

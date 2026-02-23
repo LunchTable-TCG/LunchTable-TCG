@@ -1,9 +1,8 @@
 import { convexQuery } from '@convex-dev/react-query'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { anyApi } from 'convex/server'
+import { api } from '~/lib/convexApi'
 
-const api = anyApi as any
 const getAllCardsQuery = convexQuery(api.cards.getAllCards, {})
 
 export const Route = createFileRoute('/')({
