@@ -13,10 +13,12 @@ import { Route as WatchRouteImport } from './routes/watch'
 import { Route as TokenRouteImport } from './routes/token'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PvpRouteImport } from './routes/pvp'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as DuelRouteImport } from './routes/duel'
 import { Route as DecksRouteImport } from './routes/decks'
 import { Route as CollectionRouteImport } from './routes/collection'
 import { Route as CardsRouteImport } from './routes/cards'
@@ -45,6 +47,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PvpRoute = PvpRouteImport.update({
+  id: '/pvp',
+  path: '/pvp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -63,6 +70,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const LeaderboardRoute = LeaderboardRouteImport.update({
   id: '/leaderboard',
   path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DuelRoute = DuelRouteImport.update({
+  id: '/duel',
+  path: '/duel',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DecksRoute = DecksRouteImport.update({
@@ -107,10 +119,12 @@ export interface FileRoutesByFullPath {
   '/cards': typeof CardsRouteWithChildren
   '/collection': typeof CollectionRoute
   '/decks': typeof DecksRouteWithChildren
+  '/duel': typeof DuelRoute
   '/leaderboard': typeof LeaderboardRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
+  '/pvp': typeof PvpRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
@@ -124,10 +138,12 @@ export interface FileRoutesByTo {
   '/cards': typeof CardsRouteWithChildren
   '/collection': typeof CollectionRoute
   '/decks': typeof DecksRouteWithChildren
+  '/duel': typeof DuelRoute
   '/leaderboard': typeof LeaderboardRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
+  '/pvp': typeof PvpRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
@@ -142,10 +158,12 @@ export interface FileRoutesById {
   '/cards': typeof CardsRouteWithChildren
   '/collection': typeof CollectionRoute
   '/decks': typeof DecksRouteWithChildren
+  '/duel': typeof DuelRoute
   '/leaderboard': typeof LeaderboardRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
+  '/pvp': typeof PvpRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
@@ -161,10 +179,12 @@ export interface FileRouteTypes {
     | '/cards'
     | '/collection'
     | '/decks'
+    | '/duel'
     | '/leaderboard'
     | '/onboarding'
     | '/privacy'
     | '/profile'
+    | '/pvp'
     | '/settings'
     | '/terms'
     | '/token'
@@ -178,10 +198,12 @@ export interface FileRouteTypes {
     | '/cards'
     | '/collection'
     | '/decks'
+    | '/duel'
     | '/leaderboard'
     | '/onboarding'
     | '/privacy'
     | '/profile'
+    | '/pvp'
     | '/settings'
     | '/terms'
     | '/token'
@@ -195,10 +217,12 @@ export interface FileRouteTypes {
     | '/cards'
     | '/collection'
     | '/decks'
+    | '/duel'
     | '/leaderboard'
     | '/onboarding'
     | '/privacy'
     | '/profile'
+    | '/pvp'
     | '/settings'
     | '/terms'
     | '/token'
@@ -213,10 +237,12 @@ export interface RootRouteChildren {
   CardsRoute: typeof CardsRouteWithChildren
   CollectionRoute: typeof CollectionRoute
   DecksRoute: typeof DecksRouteWithChildren
+  DuelRoute: typeof DuelRoute
   LeaderboardRoute: typeof LeaderboardRoute
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
   ProfileRoute: typeof ProfileRoute
+  PvpRoute: typeof PvpRoute
   SettingsRoute: typeof SettingsRoute
   TermsRoute: typeof TermsRoute
   TokenRoute: typeof TokenRoute
@@ -253,6 +279,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pvp': {
+      id: '/pvp'
+      path: '/pvp'
+      fullPath: '/pvp'
+      preLoaderRoute: typeof PvpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -279,6 +312,13 @@ declare module '@tanstack/react-router' {
       path: '/leaderboard'
       fullPath: '/leaderboard'
       preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/duel': {
+      id: '/duel'
+      path: '/duel'
+      fullPath: '/duel'
+      preLoaderRoute: typeof DuelRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/decks': {
@@ -359,10 +399,12 @@ const rootRouteChildren: RootRouteChildren = {
   CardsRoute: CardsRouteWithChildren,
   CollectionRoute: CollectionRoute,
   DecksRoute: DecksRouteWithChildren,
+  DuelRoute: DuelRoute,
   LeaderboardRoute: LeaderboardRoute,
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
   ProfileRoute: ProfileRoute,
+  PvpRoute: PvpRoute,
   SettingsRoute: SettingsRoute,
   TermsRoute: TermsRoute,
   TokenRoute: TokenRoute,

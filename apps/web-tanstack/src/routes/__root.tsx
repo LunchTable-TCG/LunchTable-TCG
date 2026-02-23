@@ -86,6 +86,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     Decks
                   </Link>
                   <Link
+                    to="/pvp"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    PvP
+                  </Link>
+                  <Link
+                    to="/duel"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    Duel
+                  </Link>
+                  <Link
                     to="/leaderboard"
                     activeProps={{ className: 'font-semibold text-stone-100' }}
                     className="text-sm text-stone-400"

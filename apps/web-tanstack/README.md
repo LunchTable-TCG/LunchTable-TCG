@@ -44,3 +44,5 @@ bun run --cwd apps/web-tanstack type-check
 - `/token` now includes the migrated Solana token info entry point.
 - `/watch` now fetches and displays live retake.tv stream status.
 - `/collection`, `/decks`, `/decks/$deckId`, `/onboarding`, `/profile`, `/settings` now exist as migrated route shells.
+- `/pvp` now supports ranked queue status and join/leave controls.
+- `/duel` route shell is in place for board migration.
