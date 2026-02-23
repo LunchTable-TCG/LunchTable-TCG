@@ -8,19 +8,23 @@ const readSource = (relativePath: string) =>
   readFileSync(path.join(repoRoot, relativePath), "utf8");
 
 describe("convex optimization guardrails", () => {
-  it("keeps queue and index schema required for runtime efficiency", () => {
+  it("keeps required indexes for runtime efficiency", () => {
     const schemaSource = readSource("convex/schema.ts");
     expect(schemaSource).toContain("matchPresence: defineTable");
     expect(schemaSource).toContain('.index("by_match_user", ["matchId", "userId"])');
     expect(schemaSource).toContain('.index("by_clique", ["cliqueId"])');
+    expect(schemaSource).not.toContain("aiTurnQueue: defineTable");
   });
 
-  it("dedupes AI turn scheduling and avoids full card fetches in AI turn handler", () => {
+  it("uses direct AI turn scheduling and avoids full card fetches in AI handler", () => {
     const gameSource = readSource("convex/game.ts");
 
     expect(gameSource).toContain("export const submitAction");
     expect(gameSource).toContain("export const executeAITurn");
     expect(gameSource).toContain("buildCardLookup");
+    expect(gameSource).not.toContain("async function queueAITurn");
+    expect(gameSource).not.toContain("async function claimQueuedAITurn");
+    expect(gameSource).not.toContain("aiTurnQueue");
   });
 
   it("collection UIs use optimized card/catalog queries", () => {

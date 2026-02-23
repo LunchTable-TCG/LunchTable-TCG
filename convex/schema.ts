@@ -80,12 +80,6 @@ export default defineSchema(
       .index("by_joinCode", ["joinCode"])
       .index("by_status", ["status"]),
 
-    // Dedupe/lock rows for scheduled AI turns.
-    aiTurnQueue: defineTable({
-      matchId: v.string(),
-      createdAt: v.number(),
-    }).index("by_matchId", ["matchId"]),
-
     // Presence + platform markers for active matches.
     // Used to show whether players are on web/telegram/discord/etc.
     matchPresence: defineTable({

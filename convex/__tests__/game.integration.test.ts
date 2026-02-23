@@ -2468,13 +2468,6 @@ describe("AI turn resilience", () => {
       });
     });
 
-    await t.run(async (ctx) => {
-      await ctx.db.insert("aiTurnQueue", {
-        matchId: battle.matchId,
-        createdAt: Date.now(),
-      });
-    });
-
     const versionAfterCorruption = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId: battle.matchId,
     });
@@ -2485,7 +2478,7 @@ describe("AI turn resilience", () => {
     ).resolves.toBeNull();
   });
 
-  test("nudgeAITurnAsActor only queues when the built-in CPU seat is active", async () => {
+  test("nudgeAITurnAsActor is a safe no-op before and during CPU turn", async () => {
     const t = setupTestConvex();
     await t.mutation(api.seed.seedAll, {});
     const { asUser: asAlice } = await seedUserWithDeck(t, ALICE);
@@ -2511,41 +2504,23 @@ describe("AI turn resilience", () => {
     const initialHostView = JSON.parse(initialHostViewRaw as string);
     const startedOnCpuTurn = initialHostView.currentTurnPlayer === "away";
 
-    // Nudge only queues when CPU seat is currently active.
-    await t.mutation(internal.game.nudgeAITurnAsActor, {
-      matchId: battle.matchId,
-      actorUserId: aliceUser!._id,
-    });
-
-    const queueAfterHostTurn = await t.run(async (ctx: any) => {
-      return ctx.db
-        .query("aiTurnQueue")
-        .withIndex("by_matchId", (q: any) => q.eq("matchId", battle.matchId))
-        .collect();
-    });
-    if (startedOnCpuTurn) {
-      expect(queueAfterHostTurn.length).toBeGreaterThan(0);
-    } else {
-      expect(queueAfterHostTurn.length).toBe(0);
-    }
-
-    // Clear any queued jobs before deterministic CPU-turn assertion below.
-    await t.run(async (ctx: any) => {
-      const rows = await ctx.db
-        .query("aiTurnQueue")
-        .withIndex("by_matchId", (q: any) => q.eq("matchId", battle.matchId))
-        .collect();
-      for (const row of rows) {
-        await ctx.db.delete(row._id);
-      }
-    });
+    await expect(
+      t.mutation(internal.game.nudgeAITurnAsActor, {
+        matchId: battle.matchId,
+        actorUserId: aliceUser!._id,
+      }),
+    ).resolves.toBeNull();
 
     // If host starts, pass turn once so CPU becomes active.
     if (!startedOnCpuTurn) {
+      const expectedVersion = await asAlice.query(api.game.getLatestSnapshotVersion, {
+        matchId: battle.matchId,
+      });
       await asAlice.mutation(api.game.submitAction, {
         matchId: battle.matchId,
         command: JSON.stringify({ type: "END_TURN" }),
         seat: "host",
+        expectedVersion,
       });
     }
 
@@ -2556,18 +2531,12 @@ describe("AI turn resilience", () => {
     const hostView = JSON.parse(hostViewRaw as string);
     expect(hostView.currentTurnPlayer).toBe("away");
 
-    await t.mutation(internal.game.nudgeAITurnAsActor, {
-      matchId: battle.matchId,
-      actorUserId: aliceUser!._id,
-    });
-
-    const queueAfterAiTurnNudge = await t.run(async (ctx: any) => {
-      return ctx.db
-        .query("aiTurnQueue")
-        .withIndex("by_matchId", (q: any) => q.eq("matchId", battle.matchId))
-        .collect();
-    });
-    expect(queueAfterAiTurnNudge.length).toBeGreaterThan(0);
+    await expect(
+      t.mutation(internal.game.nudgeAITurnAsActor, {
+        matchId: battle.matchId,
+        actorUserId: aliceUser!._id,
+      }),
+    ).resolves.toBeNull();
   });
 });
 

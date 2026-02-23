@@ -132,7 +132,6 @@ const resolveDefaultStarterDeckCode = () => {
 };
 
 const CARD_LOOKUP_CACHE_TTL_MS = 60_000;
-const AI_TURN_QUEUE_DEDUPE_MS = 5_000;
 const PVP_JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PVP_JOIN_CODE_LENGTH = 6;
 const RANDOM_UINT32_RANGE = 0x1_0000_0000;
@@ -223,49 +222,6 @@ async function getCachedCardLookup(ctx: any): Promise<Record<string, any>> {
   }
   await getCachedCardDefinitions(ctx);
   return cachedCardLookup ?? {};
-}
-
-async function queueAITurn(ctx: any, matchId: string): Promise<boolean> {
-  const queuedRows = await ctx.db
-    .query("aiTurnQueue")
-    .withIndex("by_matchId", (q: any) => q.eq("matchId", matchId))
-    .collect();
-  const now = Date.now();
-
-  const hasFreshJob = queuedRows.some(
-    (queuedRow: any) => now - queuedRow.createdAt < AI_TURN_QUEUE_DEDUPE_MS,
-  );
-
-  for (const queuedRow of queuedRows) {
-    if (now - queuedRow.createdAt >= AI_TURN_QUEUE_DEDUPE_MS) {
-      await ctx.db.delete(queuedRow._id);
-    }
-  }
-
-  if (hasFreshJob) {
-    return false;
-  }
-
-  await ctx.db.insert("aiTurnQueue", {
-    matchId,
-    createdAt: now,
-  });
-  return true;
-}
-
-async function claimQueuedAITurn(ctx: any, matchId: string): Promise<boolean> {
-  const queuedRows = await ctx.db
-    .query("aiTurnQueue")
-    .withIndex("by_matchId", (q: any) => q.eq("matchId", matchId))
-    .collect();
-  if (queuedRows.length === 0) {
-    return false;
-  }
-
-  for (const queuedRow of queuedRows) {
-    await ctx.db.delete(queuedRow._id);
-  }
-  return true;
 }
 
 function generateJoinCode() {
@@ -1817,10 +1773,7 @@ async function submitActionForActor(
     }
     const gameOver = events.some((e: any) => e.type === "GAME_ENDED");
     if (!gameOver) {
-      const queued = await queueAITurn(ctx, args.matchId);
-      if (queued) {
-        await scheduleAITurnProcess(ctx, 500, { matchId: args.matchId });
-      }
+      await scheduleAITurnProcess(ctx, 500, { matchId: args.matchId });
     }
   }
 
@@ -1985,10 +1938,7 @@ export const nudgeAITurnAsActor = internalMutation({
       return null;
     }
 
-    const queued = await queueAITurn(ctx, args.matchId);
-    if (queued) {
-      await scheduleAITurnProcess(ctx, 500, { matchId: args.matchId });
-    }
+    await scheduleAITurnProcess(ctx, 500, { matchId: args.matchId });
     return null;
   },
 });
@@ -2203,13 +2153,6 @@ export const executeAITurn = internalMutation({
   handler: async (ctx, args) => {
     const stepsLeft = args.stepsRemaining ?? AI_MAX_ACTIONS;
 
-    // First call: claim from queue to prevent duplicate scheduling.
-    // Continuation calls (stepsLeft < AI_MAX_ACTIONS) skip the queue check.
-    if (stepsLeft === AI_MAX_ACTIONS) {
-      const claimed = await claimQueuedAITurn(ctx, args.matchId);
-      if (!claimed) return null;
-    }
-
     if (stepsLeft <= 0) return null;
 
     // Guard: check it's still AI's turn before acting.
@@ -2242,7 +2185,7 @@ export const executeAITurn = internalMutation({
     if (Array.isArray(view.currentChain) && view.currentChain.length > 0) {
       if (view.currentPriorityPlayer !== aiSeat) {
         // Human player has chain priority — stop and let them respond.
-        // The human's action will re-trigger queueAITurn when done.
+        // The human's action will re-trigger executeAITurn scheduling when done.
         return null;
       }
 
