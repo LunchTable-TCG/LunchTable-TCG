@@ -45,7 +45,7 @@ bun run --cwd apps/web-tanstack type-check
 - `/watch` now fetches and displays live retake.tv stream status.
 - `/collection`, `/decks`, `/decks/$deckId`, `/onboarding`, `/profile`, `/settings` now exist as migrated route shells.
 - `/pvp` now supports PvP lobby create/join/cancel flows and join-by-code.
-- `/duel` route shell is in place for board migration.
+- `/duel` now supports direct lobby create/join flow and invite link generation.
 - `/story` + `/story/$chapterId` now support chapter/stage browsing and story battle start actions.
 - `/play/$matchId` now loads match meta/snapshot/story context (board rendering still pending).
 - `/cliques`, `/studio`, `/agent-dev` route shells are now migrated.
