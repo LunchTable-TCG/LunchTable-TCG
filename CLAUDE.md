@@ -22,7 +22,7 @@ LTCG-v2/
 │   ├── lunchtable-tcg-match/  # Convex component: event-sourced matches
 │   └── lunchtable-tcg-story/  # Convex component: story mode progression
 ├── apps/web-tanstack/         # Frontend (TanStack Start + React 19)
-├── apps/web/                  # Legacy frontend (compatibility only)
+├── apps/web/                  # Legacy archive (excluded from default flows)
 ├── reference/frontend/        # Reference frontend (patterns only)
 └── docs/                      # Architecture + agent docs
 ```

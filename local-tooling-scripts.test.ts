@@ -168,10 +168,7 @@ describe("scripts/setup-dev-env.sh", () => {
       "VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud",
     );
 
-    const webLegacyEnv = readFileSync(path.join(dir, "apps/web/.env.local"), "utf8");
-    expect(webLegacyEnv).toContain(
-      "VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud",
-    );
+    expect(existsSync(path.join(dir, "apps/web/.env.local"))).toBe(false);
   });
 });
 

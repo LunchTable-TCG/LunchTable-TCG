@@ -158,7 +158,7 @@ curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
 LTCG-v2/
 ├── convex/                    # Convex backend (host layer)
 ├── apps/web-tanstack/         # Primary frontend (TanStack Start)
-├── apps/web/                  # Legacy frontend (React Router; compatibility only)
+├── apps/web/                  # Legacy archive (React Router; excluded from default flows)
 ├── packages/
 │   ├── engine/                # Pure TS game engine
 │   ├── plugin-ltcg/           # ElizaOS plugin

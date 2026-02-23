@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Create/update a local agent API key for dev-only auth bypass (no Privy login).
 # Writes VITE_DEV_AGENT_API_KEY to apps/web-tanstack/.env.local
-# (and mirrors to apps/web/.env.local when present for legacy compatibility).
 
 set -euo pipefail
 
@@ -9,7 +8,6 @@ AGENT_NAME="CodexDev"
 SITE_URL="${LTCG_API_URL:-}"
 ROTATE_KEY=false
 PRIMARY_WEB_ENV="apps/web-tanstack/.env.local"
-LEGACY_WEB_ENV="apps/web/.env.local"
 
 usage() {
   cat <<'EOF'
@@ -76,9 +74,6 @@ fi
 existing_key=""
 if [ "$ROTATE_KEY" = false ] && [ -f "$PRIMARY_WEB_ENV" ]; then
   existing_key="$(awk -F= '/^VITE_DEV_AGENT_API_KEY=/{print $2}' "$PRIMARY_WEB_ENV" | tail -n 1)"
-fi
-if [ "$ROTATE_KEY" = false ] && [ -z "$existing_key" ] && [ -f "$LEGACY_WEB_ENV" ]; then
-  existing_key="$(awk -F= '/^VITE_DEV_AGENT_API_KEY=/{print $2}' "$LEGACY_WEB_ENV" | tail -n 1)"
 fi
 
 if [ "$ROTATE_KEY" = false ] && [ -n "$existing_key" ]; then
@@ -163,14 +158,8 @@ upsert_env_var() {
 }
 
 upsert_env_var "$PRIMARY_WEB_ENV" "VITE_DEV_AGENT_API_KEY" "$api_key"
-if [ -d "apps/web" ]; then
-  upsert_env_var "$LEGACY_WEB_ENV" "VITE_DEV_AGENT_API_KEY" "$api_key"
-fi
 
 echo "Wrote VITE_DEV_AGENT_API_KEY to $PRIMARY_WEB_ENV"
-if [ -d "apps/web" ]; then
-  echo "Mirrored VITE_DEV_AGENT_API_KEY to $LEGACY_WEB_ENV"
-fi
 echo ""
 echo "Dev-only auth path:"
 echo "  1) bun run dev:web"

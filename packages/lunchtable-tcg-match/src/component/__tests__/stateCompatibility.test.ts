@@ -7,8 +7,24 @@ function makeLegacyState(): GameState {
   return {
     config: DEFAULT_CONFIG,
     cardLookup: {
-      c1: { id: "c1", name: "Card 1", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
-      c2: { id: "c2", name: "Card 2", type: "spell", spellType: "normal" },
+      c1: {
+        id: "c1",
+        name: "Card 1",
+        type: "stereotype",
+        description: "Fixture card",
+        rarity: "common",
+        attack: 1000,
+        defense: 1000,
+        level: 4,
+      },
+      c2: {
+        id: "c2",
+        name: "Card 2",
+        type: "spell",
+        description: "Fixture card",
+        rarity: "common",
+        spellType: "normal",
+      },
     },
     instanceToDefinition: {} as Record<string, string>,
     hostId: "host",
@@ -67,4 +83,3 @@ describe("ensureInstanceMapping", () => {
     expect(upgraded.instanceToDefinition.c2).toBe("c2");
   });
 });
-

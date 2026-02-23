@@ -144,9 +144,9 @@ if [ -n "$WORKTREE_PATH" ]; then
 fi
 REPO_ROOT="$(cd -- "$REPO_ROOT" && pwd)"
 
-if [ ! -f "$REPO_ROOT/package.json" ] || [ ! -e "$REPO_ROOT/.git" ] || [ ! -f "$REPO_ROOT/apps/web/package.json" ]; then
+if [ ! -f "$REPO_ROOT/package.json" ] || [ ! -e "$REPO_ROOT/.git" ] || [ ! -f "$REPO_ROOT/apps/web-tanstack/package.json" ]; then
   echo "Invalid worktree root: $REPO_ROOT"
-  echo "Expected package.json, .git, and apps/web/package.json."
+  echo "Expected package.json, .git, and apps/web-tanstack/package.json."
   exit 1
 fi
 

@@ -4,7 +4,6 @@
 # - Installs dependencies from lockfile
 # - Verifies Convex CLI availability
 # - Writes local Convex env values for root + apps/web-tanstack
-#   (mirrors to apps/web when present for legacy compatibility)
 
 set -euo pipefail
 
@@ -211,7 +210,6 @@ upsert_env_var() {
 write_env_files() {
   local root_env_file=".env.local"
   local primary_web_env_file="apps/web-tanstack/.env.local"
-  local legacy_web_env_file="apps/web/.env.local"
 
   if [ -n "$DEPLOYMENT" ]; then
     upsert_env_var "$root_env_file" "CONVEX_DEPLOYMENT" "$DEPLOYMENT"
@@ -220,9 +218,6 @@ write_env_files() {
   if [ -n "$CONVEX_CLOUD_URL" ]; then
     upsert_env_var "$root_env_file" "VITE_CONVEX_URL" "$CONVEX_CLOUD_URL"
     upsert_env_var "$primary_web_env_file" "VITE_CONVEX_URL" "$CONVEX_CLOUD_URL"
-    if [ -d "apps/web" ]; then
-      upsert_env_var "$legacy_web_env_file" "VITE_CONVEX_URL" "$CONVEX_CLOUD_URL"
-    fi
   fi
 
   if [ -n "$CONVEX_SITE_URL" ]; then
@@ -245,9 +240,6 @@ echo ""
 echo "Configured local env files:"
 echo "  - .env.local"
 echo "  - apps/web-tanstack/.env.local"
-if [ -d "apps/web" ]; then
-  echo "  - apps/web/.env.local (legacy mirror)"
-fi
 if [ -n "$DEPLOYMENT" ]; then
   echo "CONVEX_DEPLOYMENT=${DEPLOYMENT}"
 fi

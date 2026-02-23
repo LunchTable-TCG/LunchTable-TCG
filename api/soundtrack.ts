@@ -316,10 +316,6 @@ async function readManifestFile(): Promise<{ raw: string; source: string }> {
       file: path.join(process.cwd(), "apps", "web-tanstack", "public", "soundtrack.in"),
       source: "file:apps/web-tanstack/public/soundtrack.in",
     },
-    {
-      file: path.join(process.cwd(), "apps", "web", "public", "soundtrack.in"),
-      source: "file:apps/web/public/soundtrack.in",
-    },
   ];
 
   for (const candidate of candidates) {

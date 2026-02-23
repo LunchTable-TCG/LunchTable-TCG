@@ -20,10 +20,6 @@ const manifests = [
     file: path.join(repoRoot, "packages/app-lunchtable/package.json"),
     required: true,
   },
-  {
-    file: path.join(repoRoot, "apps/web/package.json"),
-    required: false,
-  },
 ];
 
 const localHostPattern = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;

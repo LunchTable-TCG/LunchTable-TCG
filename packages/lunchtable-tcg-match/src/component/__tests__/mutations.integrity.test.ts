@@ -10,7 +10,6 @@ import { DEFAULT_CONFIG } from "@lunchtable/engine";
 function makeInitialState(overrides: Partial<GameState> = {}): GameState {
   const base = {
     config: DEFAULT_CONFIG,
-    instanceToDefinition: {},
     cardLookup: {
       h1: { id: "h1", name: "Host Hand", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
       h2: { id: "h2", name: "Host Deck 1", type: "stereotype", attack: 1200, defense: 1000, level: 4 },
