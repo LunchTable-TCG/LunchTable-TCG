@@ -38,3 +38,5 @@ bun run --cwd apps/web-tanstack type-check
 - `/` shows Convex connectivity + first card summary sample.
 - `/cards` lists a subset of cards from `api.cards.getAllCards`.
 - `/cards/$cardId` loads details via `api.cards.getCard`.
+- `/leaderboard` loads ranked data from `api.ranked.getLeaderboard` and `api.ranked.getRankDistribution`.
+- `/about` includes the first converted static marketing/about route.

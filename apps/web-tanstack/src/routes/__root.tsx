@@ -71,6 +71,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                   >
                     Cards
                   </Link>
+                  <Link
+                    to="/leaderboard"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    Leaderboard
+                  </Link>
+                  <Link
+                    to="/about"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    About
+                  </Link>
                 </div>
                 <span
                   className={`text-xs uppercase tracking-wide ${
