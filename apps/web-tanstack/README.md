@@ -52,7 +52,7 @@ bun run --cwd apps/web-tanstack type-check
 - `/pvp` now supports PvP lobby create/join/cancel flows and join-by-code.
 - `/duel` now supports direct lobby create/join flow and invite link generation.
 - `/story` now includes chapter-level progress summaries (status, stars, clears, last attempt) and `/story/$chapterId` supports stage launches.
-- `/play/$matchId` now renders live player zones/board snapshots, chain prompt responses, event feeds, and custom command submission.
+- `/play/$matchId` now uses canonical backend legal-move gating for guided action builders (summon/attack/activate/chain), with full move feed + custom command fallback.
 - `/cliques` now includes auto-assignment, roster preview, and leaderboard summaries.
 - `/agent-dev` now supports platform selection, API key registration, runtime connectivity checks, and starter deck assignment.
 - `/stream-overlay` now resolves an agent/match and renders spectator+chat diagnostics for capture migration.

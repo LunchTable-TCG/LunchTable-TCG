@@ -141,6 +141,19 @@ export class LTCGMatch {
     });
   }
 
+  async getLegalMoves(
+    ctx: RunQueryCtx,
+    args: {
+      matchId: string;
+      seat: "host" | "away";
+    }
+  ) {
+    return await ctx.runQuery((this.component.queries as any).getLegalMoves, {
+      matchId: args.matchId as any,
+      seat: args.seat,
+    });
+  }
+
   async getRecentEvents(
     ctx: RunQueryCtx,
     args: {

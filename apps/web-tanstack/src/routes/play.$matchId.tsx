@@ -98,6 +98,11 @@ type ChainPromptData = {
   activatableTraps: ChainPromptTrap[]
 }
 
+type LegalMove = {
+  type: string
+  [key: string]: unknown
+}
+
 function asSeat(value: unknown): Seat | null {
   return value === 'host' || value === 'away' ? value : null
 }
@@ -258,6 +263,46 @@ function parseChainPromptData(prompt: OpenPrompt | null | undefined): ChainPromp
   }
 }
 
+function parseLegalMoves(value: unknown): LegalMove[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => entry != null)
+    .map((entry) => {
+      const type = asString(entry.type)
+      if (!type) return null
+      return {
+        ...entry,
+        type,
+      } as LegalMove
+    })
+    .filter((entry): entry is LegalMove => entry != null)
+}
+
+function getMoveString(move: LegalMove, key: string): string | null {
+  return asString(move[key])
+}
+
+function getMoveStringArray(move: LegalMove, key: string): string[] {
+  return asStringArray(move[key])
+}
+
+function getMoveNumber(move: LegalMove, key: string): number | null {
+  return asNumber(move[key])
+}
+
+function getMoveBoolean(move: LegalMove, key: string): boolean | null {
+  return asBoolean(move[key])
+}
+
+function toCommandPayload(move: LegalMove): Record<string, unknown> {
+  const payload: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(move)) {
+    if (value !== undefined) payload[key] = value
+  }
+  return payload
+}
+
 function resolveSeat(meta: MatchMeta | null | undefined, userId: string | undefined): Seat | null {
   if (!meta || !userId) return null
   if (meta.hostId === userId) return 'host'
@@ -308,6 +353,97 @@ function resolveDefinitionId(args: {
   instanceDefinitions: Record<string, string>
 }): string | null {
   return args.definitionId ?? args.instanceDefinitions[args.cardId] ?? null
+}
+
+function describeLegalMove(args: {
+  move: LegalMove
+  instanceDefinitions: Record<string, string>
+  cardNamesById: Map<string, string>
+}): string {
+  const { move, instanceDefinitions, cardNamesById } = args
+  const type = move.type
+
+  if (type === 'ADVANCE_PHASE') return 'Advance phase'
+  if (type === 'END_TURN') return 'End turn'
+  if (type === 'SURRENDER') return 'Surrender'
+
+  const resolveName = (cardId: string | null) => {
+    if (!cardId) return null
+    return resolveCardLabel({
+      cardId,
+      definitionId: null,
+      instanceDefinitions,
+      cardNamesById,
+    })
+  }
+
+  if (type === 'SUMMON') {
+    const cardId = getMoveString(move, 'cardId')
+    const position = getMoveString(move, 'position') ?? 'unknown'
+    const tributes = getMoveStringArray(move, 'tributeCardIds')
+    const tributeLabel = tributes.length > 0 ? ` (${tributes.length} tribute)` : ''
+    return `Summon ${resolveName(cardId) ?? cardId ?? 'card'} in ${position}${tributeLabel}`
+  }
+
+  if (type === 'SET_MONSTER') {
+    const cardId = getMoveString(move, 'cardId')
+    return `Set monster ${resolveName(cardId) ?? cardId ?? ''}`.trim()
+  }
+
+  if (type === 'SET_SPELL_TRAP') {
+    const cardId = getMoveString(move, 'cardId')
+    return `Set spell/trap ${resolveName(cardId) ?? cardId ?? ''}`.trim()
+  }
+
+  if (type === 'ACTIVATE_SPELL' || type === 'ACTIVATE_TRAP' || type === 'ACTIVATE_EFFECT') {
+    const cardId = getMoveString(move, 'cardId')
+    const targets = getMoveStringArray(move, 'targets')
+    const targetLabel =
+      targets.length > 0
+        ? ` -> ${targets.map((target) => resolveName(target) ?? target).join(', ')}`
+        : ''
+    return `${type.toLowerCase().replace('_', ' ')} ${resolveName(cardId) ?? cardId ?? ''}${targetLabel}`.trim()
+  }
+
+  if (type === 'FLIP_SUMMON') {
+    const cardId = getMoveString(move, 'cardId')
+    return `Flip summon ${resolveName(cardId) ?? cardId ?? ''}`.trim()
+  }
+
+  if (type === 'CHANGE_POSITION') {
+    const cardId = getMoveString(move, 'cardId')
+    return `Change position ${resolveName(cardId) ?? cardId ?? ''}`.trim()
+  }
+
+  if (type === 'DECLARE_ATTACK') {
+    const attackerId = getMoveString(move, 'attackerId')
+    const targetId = getMoveString(move, 'targetId')
+    if (!targetId) {
+      return `Direct attack with ${resolveName(attackerId) ?? attackerId ?? 'attacker'}`
+    }
+    return `Attack ${resolveName(targetId) ?? targetId} with ${resolveName(attackerId) ?? attackerId ?? 'attacker'}`
+  }
+
+  if (type === 'CHAIN_RESPONSE') {
+    const pass = getMoveBoolean(move, 'pass')
+    if (pass) return 'Pass chain response'
+    const cardId = getMoveString(move, 'cardId')
+    return `Respond in chain with ${resolveName(cardId) ?? cardId ?? 'card'}`
+  }
+
+  if (type === 'PONG_SHOOT') {
+    const result = getMoveString(move, 'result') ?? 'unknown'
+    return `Pong shot (${result})`
+  }
+
+  if (type === 'PONG_DECLINE') return 'Decline pong'
+  if (type === 'REDEMPTION_SHOOT') {
+    const result = getMoveString(move, 'result') ?? 'unknown'
+    return `Redemption shot (${result})`
+  }
+  if (type === 'REDEMPTION_DECLINE') return 'Decline redemption'
+
+  return type
 }
 
 export const Route = createFileRoute('/play/$matchId')({
@@ -374,6 +510,12 @@ function PlayRoute() {
     retry: false,
     refetchInterval: 1000,
   })
+  const legalMoves = useQuery({
+    ...convexQuery(api.game.getLegalMoves, { matchId, seat: seat ?? 'host' }),
+    enabled: convexConfigured && currentUser.data != null && seat != null,
+    retry: false,
+    refetchInterval: 1000,
+  })
 
   const sinceVersion = useMemo(() => {
     if (typeof snapshotVersion.data !== 'number') return 0
@@ -420,9 +562,30 @@ function PlayRoute() {
     [openPrompt.data],
   )
 
+  const parsedLegalMoves = useMemo(
+    () => parseLegalMoves(legalMoves.data),
+    [legalMoves.data],
+  )
+
   const eventRows = useMemo(
     () => ((recentEvents.data as EventBatch[] | undefined) ?? []).slice(-30).reverse(),
     [recentEvents.data],
+  )
+
+  const coreLegalMoves = useMemo(
+    () =>
+      parsedLegalMoves.filter(
+        (move) =>
+          move.type === 'ADVANCE_PHASE' ||
+          move.type === 'END_TURN' ||
+          move.type === 'SURRENDER',
+      ),
+    [parsedLegalMoves],
+  )
+
+  const chainLegalMoves = useMemo(
+    () => parsedLegalMoves.filter((move) => move.type === 'CHAIN_RESPONSE'),
+    [parsedLegalMoves],
   )
 
   const handActionRows = useMemo(() => {
@@ -444,9 +607,19 @@ function PlayRoute() {
           cardNamesById,
         }),
         cardType: definitionId ? cardTypesById.get(definitionId) ?? null : null,
+        legalMoves: parsedLegalMoves.filter((move) => {
+          const moveCardId = getMoveString(move, 'cardId')
+          if (moveCardId !== cardId) return false
+          return (
+            move.type === 'SUMMON' ||
+            move.type === 'SET_MONSTER' ||
+            move.type === 'SET_SPELL_TRAP' ||
+            move.type === 'ACTIVATE_SPELL'
+          )
+        }),
       }
     })
-  }, [cardNamesById, cardTypesById, parsedView])
+  }, [cardNamesById, cardTypesById, parsedLegalMoves, parsedView])
 
   const boardActionRows = useMemo(() => {
     if (!parsedView) return []
@@ -471,36 +644,25 @@ function PlayRoute() {
             instanceDefinitions: parsedView.instanceDefinitions,
             cardNamesById,
           }),
-        }
-      })
-      .filter((row): row is { key: string; cardId: string; definitionId: string | null; position: string | null; name: string } => row != null)
-  }, [cardNamesById, parsedView])
-
-  const opponentTargetRows = useMemo(() => {
-    if (!parsedView) return []
-
-    return parsedView.opponentBoard
-      .map((card, index) => {
-        const cardId = card.cardId
-        if (!cardId) return null
-        const definitionId = resolveDefinitionId({
-          cardId,
-          definitionId: card.definitionId ?? null,
-          instanceDefinitions: parsedView.instanceDefinitions,
-        })
-        return {
-          key: `${cardId}-${index}`,
-          cardId,
-          name: resolveCardLabel({
-            cardId,
-            definitionId,
-            instanceDefinitions: parsedView.instanceDefinitions,
-            cardNamesById,
+          legalMoves: parsedLegalMoves.filter((move) => {
+            const moveCardId = getMoveString(move, 'cardId')
+            const attackerId = getMoveString(move, 'attackerId')
+            if (moveCardId === cardId) {
+              return (
+                move.type === 'CHANGE_POSITION' ||
+                move.type === 'FLIP_SUMMON' ||
+                move.type === 'ACTIVATE_EFFECT'
+              )
+            }
+            if (attackerId === cardId) {
+              return move.type === 'DECLARE_ATTACK'
+            }
+            return false
           }),
         }
       })
-      .filter((row): row is { key: string; cardId: string; name: string } => row != null)
-  }, [cardNamesById, parsedView])
+      .filter((row): row is { key: string; cardId: string; definitionId: string | null; position: string | null; name: string; legalMoves: LegalMove[] } => row != null)
+  }, [cardNamesById, parsedLegalMoves, parsedView])
 
   const spellTrapActionRows = useMemo(() => {
     if (!parsedView) return []
@@ -526,10 +688,19 @@ function PlayRoute() {
             cardNamesById,
           }),
           cardType: definitionId ? cardTypesById.get(definitionId) ?? null : null,
+          legalMoves: parsedLegalMoves.filter((move) => {
+            const moveCardId = getMoveString(move, 'cardId')
+            return (
+              moveCardId === cardId &&
+              (move.type === 'ACTIVATE_SPELL' ||
+                move.type === 'ACTIVATE_TRAP' ||
+                move.type === 'CHAIN_RESPONSE')
+            )
+          }),
         }
       })
-      .filter((row): row is { key: string; cardId: string; definitionId: string | null; faceDown: boolean; name: string; cardType: string | null } => row != null)
-  }, [cardNamesById, cardTypesById, parsedView])
+      .filter((row): row is { key: string; cardId: string; definitionId: string | null; faceDown: boolean; name: string; cardType: string | null; legalMoves: LegalMove[] } => row != null)
+  }, [cardNamesById, cardTypesById, parsedLegalMoves, parsedView])
 
   const submitCommand = async (command: Record<string, unknown>, successMessage: string) => {
     if (!seat) {
@@ -556,6 +727,7 @@ function PlayRoute() {
         snapshotVersion.refetch(),
         playerView.refetch(),
         openPrompt.refetch(),
+        legalMoves.refetch(),
         recentEvents.refetch(),
       ])
     } catch (error) {
@@ -563,6 +735,15 @@ function PlayRoute() {
     } finally {
       setActionBusy(false)
     }
+  }
+
+  const submitLegalMove = async (move: LegalMove) => {
+    const label = describeLegalMove({
+      move,
+      instanceDefinitions: parsedView?.instanceDefinitions ?? {},
+      cardNamesById,
+    })
+    await submitCommand(toCommandPayload(move), `${label} submitted.`)
   }
 
   return (
@@ -789,6 +970,21 @@ function PlayRoute() {
               <p className="mt-2 text-stone-400">Loading action context…</p>
             ) : (
               <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                <div className="rounded border border-stone-700/40 p-2 lg:col-span-2">
+                  <p className="text-[11px] uppercase tracking-wide text-stone-400">
+                    Legal move source
+                  </p>
+                  {legalMoves.isLoading ? (
+                    <p className="mt-2 text-xs text-stone-500">Computing legal moves…</p>
+                  ) : legalMoves.isError ? (
+                    <p className="mt-2 text-xs text-rose-300">Failed to load legal moves.</p>
+                  ) : (
+                    <p className="mt-2 text-xs text-stone-300">
+                      {parsedLegalMoves.length} legal moves available for this state.
+                    </p>
+                  )}
+                </div>
+
                 <div className="rounded border border-stone-700/40 p-2">
                   <p className="text-[11px] uppercase tracking-wide text-stone-400">From hand</p>
                   {handActionRows.length === 0 ? (
@@ -801,78 +997,28 @@ function PlayRoute() {
                           <p className="text-[11px] text-stone-500">
                             {row.cardType ?? 'unknown type'}
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {row.cardType === 'stereotype' ? (
-                              <>
+                          {row.legalMoves.length === 0 ? (
+                            <p className="mt-2 text-[11px] text-stone-500">No legal hand actions.</p>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {row.legalMoves.map((move, index) => (
                                 <button
+                                  key={`${row.cardId}-move-${index}`}
                                   onClick={() => {
-                                    void submitCommand(
-                                      { type: 'SUMMON', cardId: row.cardId, position: 'attack' },
-                                      `SUMMON attack submitted for ${row.name}.`,
-                                    )
+                                    void submitLegalMove(move)
                                   }}
                                   disabled={actionBusy}
                                   className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
                                 >
-                                  Summon ATK
+                                  {describeLegalMove({
+                                    move,
+                                    instanceDefinitions: parsedView.instanceDefinitions,
+                                    cardNamesById,
+                                  })}
                                 </button>
-                                <button
-                                  onClick={() => {
-                                    void submitCommand(
-                                      { type: 'SUMMON', cardId: row.cardId, position: 'defense' },
-                                      `SUMMON defense submitted for ${row.name}.`,
-                                    )
-                                  }}
-                                  disabled={actionBusy}
-                                  className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
-                                >
-                                  Summon DEF
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    void submitCommand(
-                                      { type: 'SET_MONSTER', cardId: row.cardId },
-                                      `SET_MONSTER submitted for ${row.name}.`,
-                                    )
-                                  }}
-                                  disabled={actionBusy}
-                                  className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
-                                >
-                                  Set Monster
-                                </button>
-                              </>
-                            ) : null}
-
-                            {(row.cardType === 'spell' || row.cardType === 'trap') ? (
-                              <button
-                                onClick={() => {
-                                  void submitCommand(
-                                    { type: 'SET_SPELL_TRAP', cardId: row.cardId },
-                                    `SET_SPELL_TRAP submitted for ${row.name}.`,
-                                  )
-                                }}
-                                disabled={actionBusy}
-                                className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
-                              >
-                                Set Spell/Trap
-                              </button>
-                            ) : null}
-
-                            {row.cardType === 'spell' ? (
-                              <button
-                                onClick={() => {
-                                  void submitCommand(
-                                    { type: 'ACTIVATE_SPELL', cardId: row.cardId },
-                                    `ACTIVATE_SPELL submitted for ${row.name}.`,
-                                  )
-                                }}
-                                disabled={actionBusy}
-                                className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
-                              >
-                                Activate Spell
-                              </button>
-                            ) : null}
-                          </div>
+                              ))}
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -891,67 +1037,28 @@ function PlayRoute() {
                           <p className="text-[11px] text-stone-500">
                             {row.position ? `Position: ${row.position}` : 'Position unknown'}
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            <button
-                              onClick={() => {
-                                void submitCommand(
-                                  { type: 'CHANGE_POSITION', cardId: row.cardId },
-                                  `CHANGE_POSITION submitted for ${row.name}.`,
-                                )
-                              }}
-                              disabled={actionBusy}
-                              className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
-                            >
-                              Change Position
-                            </button>
-                            <button
-                              onClick={() => {
-                                void submitCommand(
-                                  { type: 'FLIP_SUMMON', cardId: row.cardId },
-                                  `FLIP_SUMMON submitted for ${row.name}.`,
-                                )
-                              }}
-                              disabled={actionBusy}
-                              className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
-                            >
-                              Flip Summon
-                            </button>
-                            <button
-                              onClick={() => {
-                                void submitCommand(
-                                  { type: 'DECLARE_ATTACK', attackerId: row.cardId },
-                                  `Direct attack submitted for ${row.name}.`,
-                                )
-                              }}
-                              disabled={actionBusy}
-                              className="rounded border border-amber-700/60 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-50"
-                            >
-                              Direct Attack
-                            </button>
-                          </div>
-                          {opponentTargetRows.length > 0 ? (
+                          {row.legalMoves.length === 0 ? (
+                            <p className="mt-2 text-[11px] text-stone-500">No legal board actions.</p>
+                          ) : (
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {opponentTargetRows.map((target) => (
+                              {row.legalMoves.map((move, index) => (
                                 <button
-                                  key={`${row.cardId}-target-${target.key}`}
+                                  key={`${row.key}-move-${index}`}
                                   onClick={() => {
-                                    void submitCommand(
-                                      {
-                                        type: 'DECLARE_ATTACK',
-                                        attackerId: row.cardId,
-                                        targetId: target.cardId,
-                                      },
-                                      `Attack submitted: ${row.name} -> ${target.name}.`,
-                                    )
+                                    void submitLegalMove(move)
                                   }}
                                   disabled={actionBusy}
-                                  className="rounded border border-stone-700/60 px-2 py-1 text-[11px] text-stone-200 disabled:opacity-50"
+                                  className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
                                 >
-                                  Attack {target.name}
+                                  {describeLegalMove({
+                                    move,
+                                    instanceDefinitions: parsedView.instanceDefinitions,
+                                    cardNamesById,
+                                  })}
                                 </button>
                               ))}
                             </div>
-                          ) : null}
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -972,36 +1079,28 @@ function PlayRoute() {
                           <p className="text-[11px] text-stone-500">
                             {row.cardType ?? 'unknown type'} · {row.faceDown ? 'set' : 'face up'}
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {row.cardType === 'spell' ? (
-                              <button
-                                onClick={() => {
-                                  void submitCommand(
-                                    { type: 'ACTIVATE_SPELL', cardId: row.cardId },
-                                    `ACTIVATE_SPELL submitted for ${row.name}.`,
-                                  )
-                                }}
-                                disabled={actionBusy}
-                                className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
-                              >
-                                Activate Spell
-                              </button>
-                            ) : null}
-                            {row.cardType === 'trap' ? (
-                              <button
-                                onClick={() => {
-                                  void submitCommand(
-                                    { type: 'ACTIVATE_TRAP', cardId: row.cardId },
-                                    `ACTIVATE_TRAP submitted for ${row.name}.`,
-                                  )
-                                }}
-                                disabled={actionBusy}
-                                className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
-                              >
-                                Activate Trap
-                              </button>
-                            ) : null}
-                          </div>
+                          {row.legalMoves.length === 0 ? (
+                            <p className="mt-2 text-[11px] text-stone-500">No legal zone actions.</p>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {row.legalMoves.map((move, index) => (
+                                <button
+                                  key={`${row.key}-move-${index}`}
+                                  onClick={() => {
+                                    void submitLegalMove(move)
+                                  }}
+                                  disabled={actionBusy}
+                                  className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
+                                >
+                                  {describeLegalMove({
+                                    move,
+                                    instanceDefinitions: parsedView.instanceDefinitions,
+                                    cardNamesById,
+                                  })}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -1029,35 +1128,28 @@ function PlayRoute() {
                     <p className="text-xs text-stone-400">
                       Last opposing chain card: {chainPrompt.opponentCardName ?? 'Unknown card'}
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
-                          void submitCommand(
-                            { type: 'CHAIN_RESPONSE', pass: true },
-                            'Passed chain response.',
-                          )
-                        }}
-                        disabled={actionBusy}
-                        className="rounded border border-stone-600 px-3 py-1 text-xs disabled:opacity-50"
-                      >
-                        Pass Chain
-                      </button>
-                      {chainPrompt.activatableTraps.map((trap) => (
-                        <button
-                          key={trap.cardId}
-                          onClick={() => {
-                            void submitCommand(
-                              { type: 'CHAIN_RESPONSE', pass: false, cardId: trap.cardId },
-                              `Activated trap response: ${trap.name ?? trap.cardId}`,
-                            )
-                          }}
-                          disabled={actionBusy}
-                          className="rounded border border-cyan-700/60 px-3 py-1 text-xs text-cyan-200 disabled:opacity-50"
-                        >
-                          Respond: {trap.name ?? trap.cardId}
-                        </button>
-                      ))}
-                    </div>
+                    {chainLegalMoves.length === 0 ? (
+                      <p className="text-xs text-stone-500">No legal chain responses right now.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {chainLegalMoves.map((move, index) => (
+                          <button
+                            key={`chain-move-${index}`}
+                            onClick={() => {
+                              void submitLegalMove(move)
+                            }}
+                            disabled={actionBusy}
+                            className="rounded border border-cyan-700/60 px-3 py-1 text-xs text-cyan-200 disabled:opacity-50"
+                          >
+                            {describeLegalMove({
+                              move,
+                              instanceDefinitions: parsedView?.instanceDefinitions ?? {},
+                              cardNamesById,
+                            })}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <pre className="overflow-x-auto rounded border border-stone-700/40 p-2 text-xs text-stone-300">
@@ -1070,35 +1162,32 @@ function PlayRoute() {
 
           <article className="rounded border border-stone-700/40 p-3 text-sm">
             <h2 className="text-xs uppercase tracking-wide text-stone-400">Core actions</h2>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                onClick={() => {
-                  void submitCommand({ type: 'ADVANCE_PHASE' }, 'ADVANCE_PHASE submitted.')
-                }}
-                disabled={actionBusy}
-                className="rounded border border-stone-600 px-3 py-1 text-xs disabled:opacity-50"
-              >
-                Advance Phase
-              </button>
-              <button
-                onClick={() => {
-                  void submitCommand({ type: 'END_TURN' }, 'END_TURN submitted.')
-                }}
-                disabled={actionBusy}
-                className="rounded border border-stone-600 px-3 py-1 text-xs disabled:opacity-50"
-              >
-                End Turn
-              </button>
-              <button
-                onClick={() => {
-                  void submitCommand({ type: 'SURRENDER' }, 'SURRENDER submitted.')
-                }}
-                disabled={actionBusy}
-                className="rounded border border-rose-700/60 px-3 py-1 text-xs text-rose-300 disabled:opacity-50"
-              >
-                Surrender
-              </button>
-            </div>
+            {coreLegalMoves.length === 0 ? (
+              <p className="mt-2 text-xs text-stone-500">No core actions legal in this state.</p>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {coreLegalMoves.map((move, index) => (
+                  <button
+                    key={`core-${move.type}-${index}`}
+                    onClick={() => {
+                      void submitLegalMove(move)
+                    }}
+                    disabled={actionBusy}
+                    className={`rounded border px-3 py-1 text-xs disabled:opacity-50 ${
+                      move.type === 'SURRENDER'
+                        ? 'border-rose-700/60 text-rose-300'
+                        : 'border-stone-600'
+                    }`}
+                  >
+                    {describeLegalMove({
+                      move,
+                      instanceDefinitions: parsedView?.instanceDefinitions ?? {},
+                      cardNamesById,
+                    })}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-3 space-y-2">
               <p className="text-xs text-stone-400">Custom command JSON</p>
@@ -1133,6 +1222,45 @@ function PlayRoute() {
             </div>
 
             {actionMessage ? <p className="mt-2 text-xs text-stone-300">{actionMessage}</p> : null}
+          </article>
+
+          <article className="rounded border border-stone-700/40 p-3 text-sm">
+            <h2 className="text-xs uppercase tracking-wide text-stone-400">All legal moves</h2>
+            {legalMoves.isLoading ? (
+              <p className="mt-2 text-stone-400">Loading legal moves…</p>
+            ) : legalMoves.isError ? (
+              <p className="mt-2 text-rose-300">Failed to load legal moves.</p>
+            ) : parsedLegalMoves.length === 0 ? (
+              <p className="mt-2 text-stone-400">No legal moves available.</p>
+            ) : (
+              <ul className="mt-2 space-y-1 text-xs">
+                {parsedLegalMoves.map((move, index) => (
+                  <li
+                    key={`legal-${move.type}-${index}`}
+                    className="rounded border border-stone-700/40 px-2 py-1 text-stone-300"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        {describeLegalMove({
+                          move,
+                          instanceDefinitions: parsedView?.instanceDefinitions ?? {},
+                          cardNamesById,
+                        })}
+                      </span>
+                      <button
+                        onClick={() => {
+                          void submitLegalMove(move)
+                        }}
+                        disabled={actionBusy}
+                        className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                      >
+                        Run
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </article>
 
           <article className="rounded border border-stone-700/40 p-3 text-sm">

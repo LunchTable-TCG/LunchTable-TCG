@@ -11,6 +11,8 @@ import {
 } from "../game";
 import { buildDeckFingerprint, buildMatchSeed } from "../agentSeed";
 
+const gameApi: any = api;
+
 // ═══════════════════════════════════════════════════════════════════════
 // game.ts integration tests
 // Exercises card queries, deck operations, starter deck selection,
@@ -3947,7 +3949,60 @@ describe("getPlayerView validation", () => {
   });
 });
 
-// ── Section 35: Lobby pong/redemption options ───────────────────────
+// ── Section 35: getLegalMoves validation ────────────────────────────
+
+describe("getLegalMoves validation", () => {
+  test("participant receives legal moves for their own seat", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asAlice, asBob, matchId } = await createActivePvpMatch(t);
+    const hostViewRaw = await asAlice.query(api.game.getPlayerView, {
+      matchId,
+      seat: "host",
+    });
+    const hostView = JSON.parse(hostViewRaw) as { currentTurnPlayer?: "host" | "away" };
+    const actingSeat = hostView.currentTurnPlayer === "away" ? "away" : "host";
+    const actor = actingSeat === "host" ? asAlice : asBob;
+
+    const moves = await actor.query(gameApi.game.getLegalMoves, {
+      matchId,
+      seat: actingSeat,
+    });
+
+    expect(Array.isArray(moves)).toBe(true);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.some((move: any) => move.type === "SURRENDER")).toBe(true);
+  });
+
+  test("participant cannot request opponent seat legal moves", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asAlice, matchId } = await createActivePvpMatch(t);
+
+    await expect(
+      asAlice.query(gameApi.game.getLegalMoves, {
+        matchId,
+        seat: "away",
+      }),
+    ).rejects.toThrow(/only access your own seat/);
+  });
+
+  test("non-participant cannot request legal moves", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { matchId } = await createActivePvpMatch(t);
+    const asCharlie = await seedUser(t, CHARLIE, api);
+
+    await expect(
+      asCharlie.query(gameApi.game.getLegalMoves, {
+        matchId,
+        seat: "host",
+      }),
+    ).rejects.toThrow(/not a participant/);
+  });
+});
+
+// ── Section 36: Lobby pong/redemption options ───────────────────────
 
 describe("lobby pong/redemption options", () => {
   test("creates lobby with pongEnabled", async () => {
@@ -3985,7 +4040,7 @@ describe("lobby pong/redemption options", () => {
   });
 });
 
-// ── Section 36: getOpenPrompt and getActiveMatchByHost ───────────────
+// ── Section 37: getOpenPrompt and getActiveMatchByHost ───────────────
 
 describe("getOpenPrompt and getActiveMatchByHost extended", () => {
   test("getOpenPrompt returns null for non-chain state", async () => {
@@ -4033,7 +4088,7 @@ describe("getOpenPrompt and getActiveMatchByHost extended", () => {
   });
 });
 
-// ── Section 37: Match presence lifecycle ─────────────────────────────
+// ── Section 38: Match presence lifecycle ─────────────────────────────
 
 describe("match presence lifecycle", () => {
   test("upsert creates then updates presence", async () => {

@@ -2325,6 +2325,37 @@ export const getPlayerViewAsActor = internalQuery({
   },
 });
 
+export const getLegalMoves = query({
+  args: {
+    matchId: v.string(),
+    seat: v.union(v.literal("host"), v.literal("away")),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    await requireSeatOwnership(ctx, args.matchId, args.seat, user._id);
+    const moves = await match.getLegalMoves(ctx, args);
+    return Array.isArray(moves) ? moves : [];
+  },
+});
+
+export const getLegalMovesAsActor = internalQuery({
+  args: {
+    matchId: v.string(),
+    seat: v.union(v.literal("host"), v.literal("away")),
+    actorUserId: v.id("users"),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    await requireSeatOwnership(ctx, args.matchId, args.seat, args.actorUserId);
+    const moves = await match.getLegalMoves(ctx, {
+      matchId: args.matchId,
+      seat: args.seat,
+    });
+    return Array.isArray(moves) ? moves : [];
+  },
+});
+
 export const getPublicPlayerViewAsActor = internalQuery({
   args: {
     matchId: v.string(),
