@@ -1,7 +1,17 @@
 import type { CardDefinition } from "./types/cards.js";
 import type { Command } from "./types/commands.js";
 import type { EngineEvent } from "./types/events.js";
-import type { GameState, PlayerView, Seat, BoardCard, SpellTrapCard, LingeringEffect } from "./types/state.js";
+import type {
+  GameState,
+  PlayerView,
+  Seat,
+  BoardCard,
+  SpellTrapCard,
+  LingeringEffect,
+  CostModifier,
+  TurnRestriction,
+  TopDeckViewState,
+} from "./types/state.js";
 import type { EngineConfig } from "./types/config.js";
 import { DEFAULT_CONFIG } from "./types/config.js";
 import { nextPhase, opponentSeat } from "./rules/phases.js";
@@ -335,6 +345,52 @@ function addTemporaryModifier(
   };
 }
 
+function getCostModifiers(state: GameState): CostModifier[] {
+  return state.costModifiers ?? [];
+}
+
+function getTurnRestrictions(state: GameState): TurnRestriction[] {
+  return state.turnRestrictions ?? [];
+}
+
+function getTopDeckView(state: GameState): { host: TopDeckViewState | null; away: TopDeckViewState | null } {
+  return state.topDeckView ?? { host: null, away: null };
+}
+
+function expiresOnTurn(state: GameState, durationTurns: number): number {
+  return state.turnNumber + Math.max(1, durationTurns);
+}
+
+function cleanupRuleOverlays(state: GameState): GameState {
+  const nextCostModifiers = getCostModifiers(state).filter((modifier) => modifier.expiresOnTurn > state.turnNumber);
+  const nextRestrictions = getTurnRestrictions(state).filter((restriction) => restriction.expiresOnTurn > state.turnNumber);
+  const topDeckView = getTopDeckView(state);
+  const nextTopDeckView = {
+    host: topDeckView.host && topDeckView.host.viewedAtTurn + 1 < state.turnNumber ? null : topDeckView.host,
+    away: topDeckView.away && topDeckView.away.viewedAtTurn + 1 < state.turnNumber ? null : topDeckView.away,
+  };
+
+  return {
+    ...state,
+    costModifiers: nextCostModifiers,
+    turnRestrictions: nextRestrictions,
+    topDeckView: nextTopDeckView,
+  };
+}
+
+function hasTurnRestriction(
+  state: GameState,
+  seat: Seat,
+  restriction: TurnRestriction["restriction"],
+): boolean {
+  return getTurnRestrictions(state).some(
+    (effect) =>
+      effect.seat === seat &&
+      effect.restriction === restriction &&
+      effect.expiresOnTurn > state.turnNumber,
+  );
+}
+
 export function createInitialState(
   cardLookup: Record<string, CardDefinition>,
   config: EngineConfig,
@@ -416,6 +472,9 @@ export function createInitialState(
     pendingPong: null,
     pendingRedemption: null,
     redemptionUsed: { host: false, away: false },
+    costModifiers: [],
+    turnRestrictions: [],
+    topDeckView: { host: null, away: null },
   };
 }
 
@@ -458,6 +517,7 @@ export function mask(state: GameState, seat: Seat): PlayerView {
   const opponentLifePoints = isHost ? state.awayLifePoints : state.hostLifePoints;
   const opponentDeckCount = isHost ? state.awayDeck.length : state.hostDeck.length;
   const opponentBreakdownsCaused = isHost ? state.awayBreakdownsCaused : state.hostBreakdownsCaused;
+  const topDeckView = getTopDeckView(state);
 
   return {
     instanceDefinitions: buildVisibleInstanceDefinitions(state, seat),
@@ -498,6 +558,7 @@ export function mask(state: GameState, seat: Seat): PlayerView {
     winReason: state.winReason,
     pendingPong: state.pendingPong,
     pendingRedemption: state.pendingRedemption,
+    topDeckView: isHost ? topDeckView.host?.cardIds ?? null : topDeckView.away?.cardIds ?? null,
   };
 }
 
@@ -526,11 +587,14 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
 
   const isChainWindow = state.currentChain.length > 0;
   const isChainResponder = isChainWindow && state.currentPriorityPlayer === seat;
+  const effectsDisabled = hasTurnRestriction(state, seat, "disable_effects");
+  const attacksDisabled = hasTurnRestriction(state, seat, "disable_attacks");
 
   if (isChainWindow) {
     if (!isChainResponder) return [];
   } else if (state.currentTurnPlayer !== seat) {
     // During opponent's turn, check for set quick-play spells and set traps the player can activate
+    if (effectsDisabled) return [];
     const opponentTurnMoves: Command[] = [];
     const playerSpellTrapZone = seat === "host"
       ? state.hostSpellTrapZone
@@ -566,6 +630,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
   if (isChainWindow) {
     if (!isChainResponder) return moves;
     moves.push({ type: "CHAIN_RESPONSE", pass: true });
+    if (effectsDisabled) return moves;
 
     const responderTrapZone = seat === "host"
       ? state.hostSpellTrapZone
@@ -692,9 +757,10 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
     }
 
     // ACTIVATE_SPELL moves (from hand or face-down set spells)
-    for (const cardId of hand) {
-      const card = getCardDefinition(state, cardId);
-      if (!card || card.type !== "spell") continue;
+    if (!effectsDisabled) {
+      for (const cardId of hand) {
+        const card = getCardDefinition(state, cardId);
+        if (!card || card.type !== "spell") continue;
 
       // Check if we have room in spell/trap zone (unless it's a field spell)
       if (card.spellType !== "field" && spellTrapZone.length >= state.config.maxSpellTrapSlots) {
@@ -759,88 +825,92 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
         if (eff && !hasValidTargets(state, eff, seat)) continue;
       }
 
-      moves.push({
-        type: "ACTIVATE_SPELL",
-        cardId,
-      });
-    }
+        moves.push({
+          type: "ACTIVATE_SPELL",
+          cardId,
+        });
+      }
 
-    // ACTIVATE_SPELL for face-down set spells
-    for (const setCard of spellTrapZone) {
-      if (!setCard.faceDown) continue;
+      // ACTIVATE_SPELL for face-down set spells
+      for (const setCard of spellTrapZone) {
+        if (!setCard.faceDown) continue;
 
-      const card = state.cardLookup[setCard.definitionId];
-      if (!card || card.type !== "spell") continue;
+        const card = state.cardLookup[setCard.definitionId];
+        if (!card || card.type !== "spell") continue;
 
-      // Equip spells from spell/trap zone: must have face-up monster
-      if (card.spellType === "equip") {
-        const faceUpMonsters = board.filter((c) => !c.faceDown);
-        if (faceUpMonsters.length === 0) continue;
+        // Equip spells from spell/trap zone: must have face-up monster
+        if (card.spellType === "equip") {
+          const faceUpMonsters = board.filter((c) => !c.faceDown);
+          if (faceUpMonsters.length === 0) continue;
 
-        for (const monster of faceUpMonsters) {
-          moves.push({
-            type: "ACTIVATE_SPELL",
-            cardId: setCard.cardId,
-            targets: [monster.cardId],
-          });
+          for (const monster of faceUpMonsters) {
+            moves.push({
+              type: "ACTIVATE_SPELL",
+              cardId: setCard.cardId,
+              targets: [monster.cardId],
+            });
+          }
+          continue;
         }
-        continue;
-      }
 
-      // Check target availability for the spell's first effect
-      if (card.effects && card.effects.length > 0) {
-        const eff = card.effects[0];
-        if (eff && !hasValidTargets(state, eff, seat)) continue;
-      }
-
-      moves.push({
-        type: "ACTIVATE_SPELL",
-        cardId: setCard.cardId,
-      });
-    }
-
-    // ACTIVATE_TRAP moves (face-down set traps only)
-    for (const setCard of spellTrapZone) {
-      if (!setCard.faceDown) continue;
-
-      const card = state.cardLookup[setCard.definitionId];
-      if (!card || card.type !== "trap") continue;
-
-      // Check target availability for the trap's first effect
-      if (card.effects && card.effects.length > 0) {
-        const eff = card.effects[0];
-        if (eff && !hasValidTargets(state, eff, seat)) continue;
-      }
-
-      moves.push({
-        type: "ACTIVATE_TRAP",
-        cardId: setCard.cardId,
-      });
-    }
-
-    // ACTIVATE_EFFECT moves (face-up monsters with ignition effects)
-    for (const boardCard of board) {
-      if (boardCard.faceDown) continue;
-      const cardDef = state.cardLookup[boardCard.definitionId];
-      if (!cardDef?.effects) continue;
-
-      for (let i = 0; i < cardDef.effects.length; i++) {
-        const eff = cardDef.effects[i];
-        if (eff.type !== "ignition") continue;
-        if (!canActivateEffect(state, eff, seat, boardCard.cardId)) continue;
-        if (!hasValidTargets(state, eff, seat)) continue;
+        // Check target availability for the spell's first effect
+        if (card.effects && card.effects.length > 0) {
+          const eff = card.effects[0];
+          if (eff && !hasValidTargets(state, eff, seat)) continue;
+        }
 
         moves.push({
-          type: "ACTIVATE_EFFECT",
-          cardId: boardCard.cardId,
-          effectIndex: i,
+          type: "ACTIVATE_SPELL",
+          cardId: setCard.cardId,
         });
+      }
+
+      // ACTIVATE_TRAP moves (face-down set traps only)
+      for (const setCard of spellTrapZone) {
+        if (!setCard.faceDown) continue;
+
+        const card = state.cardLookup[setCard.definitionId];
+        if (!card || card.type !== "trap") continue;
+
+        // Check target availability for the trap's first effect
+        if (card.effects && card.effects.length > 0) {
+          const eff = card.effects[0];
+          if (eff && !hasValidTargets(state, eff, seat)) continue;
+        }
+
+        moves.push({
+          type: "ACTIVATE_TRAP",
+          cardId: setCard.cardId,
+        });
+      }
+
+      // ACTIVATE_EFFECT moves (face-up monsters with ignition effects)
+      for (const boardCard of board) {
+        if (boardCard.faceDown) continue;
+        const cardDef = state.cardLookup[boardCard.definitionId];
+        if (!cardDef?.effects) continue;
+
+        for (let i = 0; i < cardDef.effects.length; i++) {
+          const eff = cardDef.effects[i];
+          if (eff.type !== "ignition") continue;
+          if (!canActivateEffect(state, eff, seat, boardCard.cardId)) continue;
+          if (!hasValidTargets(state, eff, seat)) continue;
+
+          moves.push({
+            type: "ACTIVATE_EFFECT",
+            cardId: boardCard.cardId,
+            effectIndex: i,
+          });
+        }
       }
     }
   }
 
   // Combat phase moves
   if (state.currentPhase === "combat") {
+    if (attacksDisabled) {
+      return moves;
+    }
     // DECLARE_ATTACK moves
     if (state.turnNumber > 1) {
       const faceUpOpponentMonsters = opponentBoard.filter((c) => !c.faceDown);
@@ -876,6 +946,7 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
 
 export function decide(state: GameState, command: Command, seat: Seat): EngineEvent[] {
   if (state.gameOver) return [];
+  const effectsDisabled = hasTurnRestriction(state, seat, "disable_effects");
 
   // SURRENDER is always allowed regardless of turn or chain state.
   if (command.type !== "SURRENDER") {
@@ -884,7 +955,11 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       if (command.type !== "CHAIN_RESPONSE" || state.currentPriorityPlayer !== seat) {
         return [];
       }
+      if (effectsDisabled && command.cardId) {
+        return [];
+      }
     } else if (state.currentTurnPlayer !== seat) {
+      if (effectsDisabled) return [];
       // Allow set quick-play spell activation during opponent's turn
       if (command.type === "ACTIVATE_SPELL") {
         const playerSpellTrapZone = seat === "host" ? state.hostSpellTrapZone : state.awaySpellTrapZone;
@@ -904,6 +979,16 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       } else {
         return [];
       }
+    }
+  }
+
+  if (effectsDisabled) {
+    if (
+      command.type === "ACTIVATE_SPELL" ||
+      command.type === "ACTIVATE_TRAP" ||
+      command.type === "ACTIVATE_EFFECT"
+    ) {
+      return [];
     }
   }
 
@@ -930,11 +1015,21 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
         break;
       }
 
-      const to = nextPhase(from);
+      let to = nextPhase(from);
+      if (
+        to === "combat" &&
+        hasTurnRestriction(state, state.currentTurnPlayer, "disable_battle_phase")
+      ) {
+        to = nextPhase("combat");
+      }
       events.push({ type: "PHASE_CHANGED", from, to });
 
       // When transitioning from draw phase, current player draws a card
-      if (from === "draw" && to === "standby") {
+      if (
+        from === "draw" &&
+        to === "standby" &&
+        !hasTurnRestriction(state, state.currentTurnPlayer, "disable_draw_phase")
+      ) {
         events.push(...drawCard(state, state.currentTurnPlayer));
       }
 
@@ -999,6 +1094,7 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
     }
 
     case "DECLARE_ATTACK": {
+      if (hasTurnRestriction(state, seat, "disable_attacks")) break;
       events.push(...decideDeclareAttack(state, seat, command));
       break;
     }
@@ -1181,6 +1277,7 @@ export function evolve(
         // Temporary modifiers from the previous turn should expire now.
         const cleanup = cleanupTemporaryModifiers(newState);
         newState = cleanup.state;
+        newState = cleanupRuleOverlays(newState);
         // Reset combat flags for the new turn player's monsters
         if (event.seat === "host") {
           newState.hostBoard = newState.hostBoard.map((c) => ({
@@ -1498,6 +1595,76 @@ export function evolve(
 
       case "MODIFIER_EXPIRED":
         break;
+
+      case "COST_MODIFIER_APPLIED": {
+        const costModifier: CostModifier = {
+          seat: event.seat,
+          cardType: event.cardType,
+          operation: event.operation,
+          amount: event.amount,
+          sourceCardId: event.sourceCardId,
+          expiresOnTurn: expiresOnTurn(newState, event.durationTurns),
+        };
+        newState = {
+          ...newState,
+          costModifiers: [...getCostModifiers(newState), costModifier],
+        };
+        break;
+      }
+
+      case "TURN_RESTRICTION_APPLIED": {
+        const restriction: TurnRestriction = {
+          seat: event.seat,
+          restriction: event.restriction,
+          sourceCardId: event.sourceCardId,
+          expiresOnTurn: expiresOnTurn(newState, event.durationTurns),
+        };
+        newState = {
+          ...newState,
+          turnRestrictions: [...getTurnRestrictions(newState), restriction],
+        };
+        break;
+      }
+
+      case "TOP_CARDS_VIEWED": {
+        const topDeckView = getTopDeckView(newState);
+        const nextTopDeckView = {
+          ...topDeckView,
+          [event.seat]: {
+            cardIds: [...event.cardIds],
+            sourceCardId: event.sourceCardId,
+            viewedAtTurn: newState.turnNumber,
+          },
+        };
+        newState = {
+          ...newState,
+          topDeckView: nextTopDeckView,
+        };
+        break;
+      }
+
+      case "TOP_CARDS_REARRANGED": {
+        const deckKey = event.seat === "host" ? "hostDeck" : "awayDeck";
+        const currentDeck = [...newState[deckKey]];
+        const count = Math.min(currentDeck.length, event.cardIds.length);
+        const reorderedTop = event.cardIds.slice(0, count);
+        const nextDeck = [...reorderedTop, ...currentDeck.slice(count)];
+        const topDeckView = getTopDeckView(newState);
+        const nextTopDeckView = {
+          ...topDeckView,
+          [event.seat]: {
+            cardIds: reorderedTop,
+            sourceCardId: event.sourceCardId,
+            viewedAtTurn: newState.turnNumber,
+          },
+        };
+        newState = {
+          ...newState,
+          [deckKey]: nextDeck,
+          topDeckView: nextTopDeckView,
+        };
+        break;
+      }
 
       case "COST_PAID":
         // Marker event — actual state changes are handled by the

@@ -59,6 +59,41 @@ function assertConfigMatchesExpected(config: unknown, configAllowlist?: ConfigAl
   }
 }
 
+function secureRandomFloat(): number {
+  const cryptoObj = globalThis.crypto;
+  if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
+    const values = new Uint32Array(1);
+    cryptoObj.getRandomValues(values);
+    return values[0]! / 0x1_0000_0000;
+  }
+  return Math.random();
+}
+
+function resolveChanceResult(randomFloat: () => number): "sink" | "miss" {
+  return randomFloat() < 0.5 ? "sink" : "miss";
+}
+
+export function normalizeChanceCommand(
+  command: Command,
+  randomFloat: () => number = secureRandomFloat,
+): Command {
+  if (command.type === "PONG_SHOOT") {
+    return {
+      ...command,
+      result: resolveChanceResult(randomFloat),
+    };
+  }
+
+  if (command.type === "REDEMPTION_SHOOT") {
+    return {
+      ...command,
+      result: resolveChanceResult(randomFloat),
+    };
+  }
+
+  return command;
+}
+
 function runCommand(
   state: GameState,
   command: Command,
@@ -571,6 +606,8 @@ export const submitAction = mutation({
     } catch {
       throw new Error("Failed to parse command");
     }
+    const normalizedCommand = normalizeChanceCommand(parsedCommand);
+    const serializedCommand = JSON.stringify(normalizedCommand);
 
     // -----------------------------------------------------------------------
     // 5. Run decide/evolve
@@ -580,12 +617,12 @@ export const submitAction = mutation({
     let events: EngineEvent[] = [];
     let newState: GameState = state;
     try {
-      if (parsedCommand.type === "END_TURN") {
+      if (normalizedCommand.type === "END_TURN") {
         const macroResult = runEndTurnMacro(state, args.seat as Seat);
         events = macroResult.events;
         newState = macroResult.state;
       } else {
-        const result = runCommand(state, parsedCommand, args.seat as Seat);
+        const result = runCommand(state, normalizedCommand, args.seat as Seat);
         events = result.allEvents;
         newState = result.state;
       }
@@ -623,7 +660,7 @@ export const submitAction = mutation({
       matchId: args.matchId,
       version: newVersion,
       events: JSON.stringify(events),
-      command: args.command,
+      command: serializedCommand,
       seat: args.seat,
       createdAt: Date.now(),
     });

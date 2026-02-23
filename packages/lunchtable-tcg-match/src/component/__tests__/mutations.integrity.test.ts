@@ -3,6 +3,7 @@ import type { GameState } from "@lunchtable/engine";
 import {
   assertInitialStateIntegrity,
   haveSameCardCounts,
+  normalizeChanceCommand,
 } from "../mutations";
 import { DEFAULT_CONFIG } from "@lunchtable/engine";
 
@@ -80,6 +81,43 @@ describe("haveSameCardCounts", () => {
 
   it("detects card count mismatches", () => {
     expect(haveSameCardCounts(["a", "b"], ["a", "a"])).toBe(false);
+  });
+});
+
+describe("normalizeChanceCommand", () => {
+  it("overrides client-selected pong result with server randomness", () => {
+    const command = {
+      type: "PONG_SHOOT",
+      destroyedCardId: "d:1",
+      result: "sink",
+    } as const;
+
+    const normalized = normalizeChanceCommand(command, () => 0.9);
+
+    expect(normalized).toEqual({
+      type: "PONG_SHOOT",
+      destroyedCardId: "d:1",
+      result: "miss",
+    });
+  });
+
+  it("overrides client-selected redemption result with server randomness", () => {
+    const command = {
+      type: "REDEMPTION_SHOOT",
+      result: "miss",
+    } as const;
+
+    const normalized = normalizeChanceCommand(command, () => 0.1);
+
+    expect(normalized).toEqual({
+      type: "REDEMPTION_SHOOT",
+      result: "sink",
+    });
+  });
+
+  it("leaves non-random commands unchanged", () => {
+    const command = { type: "END_TURN" } as const;
+    expect(normalizeChanceCommand(command, () => 0.9)).toBe(command);
   });
 });
 

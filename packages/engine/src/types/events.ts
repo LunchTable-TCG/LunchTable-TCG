@@ -42,6 +42,34 @@ export type EngineEvent =
       expiresAt: "end_of_turn" | "end_of_next_turn" | "permanent";
     }
   | { type: "MODIFIER_EXPIRED"; cardId: string; source: string }
+  | {
+      type: "COST_MODIFIER_APPLIED";
+      seat: Seat;
+      cardType: "spell" | "trap" | "all";
+      operation: "set" | "add" | "multiply";
+      amount: number;
+      sourceCardId: string;
+      durationTurns: number;
+    }
+  | {
+      type: "TURN_RESTRICTION_APPLIED";
+      seat: Seat;
+      restriction: "disable_attacks" | "disable_battle_phase" | "disable_draw_phase" | "disable_effects";
+      sourceCardId: string;
+      durationTurns: number;
+    }
+  | {
+      type: "TOP_CARDS_VIEWED";
+      seat: Seat;
+      cardIds: string[];
+      sourceCardId: string;
+    }
+  | {
+      type: "TOP_CARDS_REARRANGED";
+      seat: Seat;
+      cardIds: string[];
+      sourceCardId: string;
+    }
   | { type: "CHAIN_STARTED" }
   | { type: "CHAIN_LINK_ADDED"; cardId: string; seat: Seat; effectIndex: number; targets?: string[] }
   | { type: "CHAIN_RESOLVED" }

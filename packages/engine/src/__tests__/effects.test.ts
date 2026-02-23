@@ -669,6 +669,44 @@ describe("canActivateEffect", () => {
 
     expect(result).toBe(true);
   });
+
+  it("applies active cost modifiers when validating effect costs", () => {
+    const state = createMinimalState();
+    state.cardLookup["source_spell"] = {
+      id: "source_spell",
+      name: "Source Spell",
+      type: "spell",
+      description: "Costed effect source",
+      rarity: "common",
+      spellType: "normal",
+    };
+    state.hostHand = ["source_spell", "discard_1"];
+    state.costModifiers = [
+      {
+        seat: "host",
+        cardType: "spell",
+        operation: "add",
+        amount: 1,
+        sourceCardId: "field_source",
+        expiresOnTurn: 99,
+      },
+    ];
+
+    const result = canActivateEffect(
+      state,
+      {
+        id: "eff_costed",
+        type: "ignition",
+        description: "Discard to activate",
+        actions: [],
+        cost: { type: "discard", count: 1 },
+      },
+      "host",
+      "source_spell",
+    );
+
+    expect(result).toBe(false);
+  });
 });
 
 // ── Tests: detectTriggerEffects ─────────────────────────────────

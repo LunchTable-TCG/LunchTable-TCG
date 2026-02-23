@@ -283,5 +283,41 @@ describe("instance ids", () => {
     expect(nextState.hostBoard[0]?.equippedCards).toEqual(["equip_instance_b"]);
     expect(nextState.hostBoard[0]?.temporaryBoosts.attack).toBe(200);
   });
-});
 
+  it("special_summon_preserves_instance_definition_mapping", () => {
+    const state = createInitialState(
+      CARD_LOOKUP,
+      DEFAULT_CONFIG,
+      "host",
+      "away",
+      ["monster_def", "monster_def", "monster_def", "monster_def", "monster_def"],
+      ["monster_def", "monster_def", "monster_def", "monster_def", "monster_def"],
+      "host",
+      () => 0.5,
+    );
+
+    const cardId = state.hostHand[0]!;
+    const expectedDefinitionId = state.instanceToDefinition[cardId]!;
+    expect(expectedDefinitionId).toBe("monster_def");
+
+    const nextState = evolve(
+      state,
+      [
+        {
+          type: "SPECIAL_SUMMONED",
+          seat: "host",
+          cardId,
+          from: "hand",
+          position: "attack",
+        },
+      ],
+      { skipDerivedChecks: true },
+    );
+
+    const summoned = nextState.hostBoard.find((card) => card.cardId === cardId);
+    expect(summoned).toBeTruthy();
+    expect(summoned?.definitionId).toBe(expectedDefinitionId);
+    expect(nextState.cardLookup[summoned!.definitionId]?.id).toBe(expectedDefinitionId);
+    expect(nextState.hostHand).not.toContain(cardId);
+  });
+});
