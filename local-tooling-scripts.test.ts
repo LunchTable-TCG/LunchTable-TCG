@@ -40,11 +40,13 @@ function initTempRepo() {
   );
 
   mkdirSync(path.join(dir, ".github/workflows"), { recursive: true });
+  mkdirSync(path.join(dir, "apps/web-tanstack"), { recursive: true });
   mkdirSync(path.join(dir, "apps/web/src/components/game/hooks"), { recursive: true });
   mkdirSync(path.join(dir, "apps/web/api"), { recursive: true });
   mkdirSync(path.join(dir, "api"), { recursive: true });
 
   writeFileSync(path.join(dir, "package.json"), "{\n  \"name\": \"test\"\n}\n");
+  writeFileSync(path.join(dir, "apps/web-tanstack/package.json"), "{\n  \"name\": \"web-ts\"\n}\n");
   writeFileSync(path.join(dir, "apps/web/package.json"), "{\n  \"name\": \"web\"\n}\n");
 
   expect(runCommand(dir, "git", ["init", "-q"]).status).toBe(0);
@@ -148,7 +150,14 @@ describe("scripts/setup-dev-env.sh", () => {
     expect(rootEnv).toContain("VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud");
     expect(rootEnv).toContain("LTCG_API_URL=https://scintillating-mongoose-458.convex.site");
 
-    const webEnv = readFileSync(path.join(dir, "apps/web/.env.local"), "utf8");
-    expect(webEnv).toContain("VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud");
+    const webTanstackEnv = readFileSync(path.join(dir, "apps/web-tanstack/.env.local"), "utf8");
+    expect(webTanstackEnv).toContain(
+      "VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud",
+    );
+
+    const webLegacyEnv = readFileSync(path.join(dir, "apps/web/.env.local"), "utf8");
+    expect(webLegacyEnv).toContain(
+      "VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud",
+    );
   });
 });

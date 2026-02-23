@@ -3,11 +3,40 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "elizaos": {
+    "kind": "app",
+    "app": {
+      "displayName": "LunchTable: School of Hard Knocks",
+      "category": "game",
+      "launchType": "connect",
+      "launchUrl": "https://lunchtable.app",
+      "capabilities": [
+        "observe",
+        "control",
+        "story-mode",
+        "pvp",
+        "spectate",
+        "chat"
+      ],
+      "minPlayers": 1,
+      "maxPlayers": 2,
+      "viewer": {
+        "url": "https://lunchtable.app",
+        "embedParams": {
+          "embedded": "true",
+          "mode": "play"
+        },
+        "postMessageAuth": true,
+        "sandbox": "allow-scripts allow-same-origin allow-popups allow-forms"
+      }
+    }
+  },
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --port 3334",
     "build": "vite build && tsc --noEmit",
+    "build:vercel": "vite build",
     "type-check": "tsc --noEmit",
-    "preview": "vite preview",
+    "preview": "vite preview --port 3334",
     "start": "node .output/server/index.mjs"
   },
   "dependencies": {

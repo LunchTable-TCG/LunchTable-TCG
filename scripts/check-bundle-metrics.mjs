@@ -31,7 +31,7 @@ async function walkFiles(dir) {
 }
 
 async function main() {
-  const distArg = process.argv[2] ?? "apps/web/dist";
+  const distArg = process.argv[2] ?? "apps/web-tanstack/dist/client";
   const distDir = resolve(process.cwd(), distArg);
   const warnBytes = parsePositiveInt(process.env.BUNDLE_WARN_BYTES, DEFAULT_WARN_BYTES);
   const topN = parsePositiveInt(process.env.BUNDLE_TOP_N, DEFAULT_TOP_N);
