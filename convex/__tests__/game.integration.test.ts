@@ -2050,6 +2050,131 @@ describe("AI turn resilience", () => {
       t.mutation(internal.game.executeAITurn, { matchId: battle.matchId }),
     ).resolves.toBeNull();
   });
+
+  test("nudgeAITurnAsActor only queues when the built-in CPU seat is active", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asUser: asAlice } = await seedUserWithDeck(t, ALICE);
+    const chapterId = await getFirstChapterId(t);
+
+    const battle = await asAlice.mutation(api.game.startStoryBattle, {
+      chapterId,
+      stageNumber: 1,
+    });
+
+    const aliceUser = await t.run(async (ctx: any) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) => q.eq("privyId", ALICE.subject))
+        .first(),
+    );
+    expect(aliceUser).toBeTruthy();
+
+    // Host turn initially: nudge should be a no-op.
+    await t.mutation(internal.game.nudgeAITurnAsActor, {
+      matchId: battle.matchId,
+      actorUserId: aliceUser!._id,
+    });
+
+    const queueAfterHostTurn = await t.run(async (ctx: any) => {
+      return ctx.db
+        .query("aiTurnQueue")
+        .withIndex("by_matchId", (q: any) => q.eq("matchId", battle.matchId))
+        .collect();
+    });
+    expect(queueAfterHostTurn.length).toBe(0);
+
+    // Pass turn to CPU and clear any previously queued jobs so this test can
+    // validate the explicit nudge behavior deterministically.
+    await asAlice.mutation(api.game.submitAction, {
+      matchId: battle.matchId,
+      command: JSON.stringify({ type: "END_TURN" }),
+      seat: "host",
+    });
+
+    await t.run(async (ctx: any) => {
+      const rows = await ctx.db
+        .query("aiTurnQueue")
+        .withIndex("by_matchId", (q: any) => q.eq("matchId", battle.matchId))
+        .collect();
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+    });
+
+    const hostViewRaw = await asAlice.query(api.game.getPlayerView, {
+      matchId: battle.matchId,
+      seat: "host",
+    });
+    const hostView = JSON.parse(hostViewRaw as string);
+    expect(hostView.currentTurnPlayer).toBe("away");
+
+    await t.mutation(internal.game.nudgeAITurnAsActor, {
+      matchId: battle.matchId,
+      actorUserId: aliceUser!._id,
+    });
+
+    const queueAfterAiTurnNudge = await t.run(async (ctx: any) => {
+      return ctx.db
+        .query("aiTurnQueue")
+        .withIndex("by_matchId", (q: any) => q.eq("matchId", battle.matchId))
+        .collect();
+    });
+    expect(queueAfterAiTurnNudge.length).toBeGreaterThan(0);
+  });
+});
+
+describe("agent API mode invariants", () => {
+  test("agentStartBattle always provisions a story match with CPU opponent", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+
+    const registered = await t.mutation(api.agentAuth.registerAgent, {
+      name: "CpuStoryInvariant",
+      apiKeyHash: "cpu_story_invariant_hash",
+      apiKeyPrefix: "ltcg_cpu_story",
+    });
+    const chapterId = await getFirstChapterId(t);
+
+    const battle = await t.mutation(api.agentAuth.agentStartBattle, {
+      agentUserId: registered.userId,
+      chapterId,
+      stageNumber: 1,
+    });
+
+    const meta = await t.query(internal.game.getMatchMetaAsActor, {
+      matchId: battle.matchId,
+      actorUserId: registered.userId,
+    });
+    expect(meta).toBeTruthy();
+    expect((meta as any).mode).toBe("story");
+    expect((meta as any).awayId).toBe("cpu");
+  });
+
+  test("agentJoinMatch rejects story waiting matches (story is CPU-only)", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asUser: asAlice } = await seedUserWithDeck(t, ALICE);
+    const chapterId = await getFirstChapterId(t);
+
+    const waitingStoryMatch = await asAlice.mutation(api.game.startStoryBattleForAgent, {
+      chapterId,
+      stageNumber: 1,
+    });
+
+    const joiner = await t.mutation(api.agentAuth.registerAgent, {
+      name: "StoryJoinReject",
+      apiKeyHash: "story_join_reject_hash",
+      apiKeyPrefix: "ltcg_story_join",
+    });
+
+    await expect(
+      t.mutation(api.agentAuth.agentJoinMatch, {
+        agentUserId: joiner.userId,
+        matchId: waitingStoryMatch.matchId,
+      }),
+    ).rejects.toThrow(/Story matches are CPU-only/);
+  });
 });
 
 // ── Section 18: Spectator deep tests ────────────────────────────────

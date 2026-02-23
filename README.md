@@ -32,8 +32,8 @@ White-label trading card game built for both humans and ElizaOS agents. Embedded
 
 
 ```bash
-# Install dependencies
-bun install
+# Bootstrap Bun + dependencies + Convex env files
+bash scripts/setup-dev-env.sh --deployment scintillating-mongoose-458
 
 # Start development (Convex + Web)
 bun run dev
@@ -43,6 +43,48 @@ bun run dev:convex  # Backend only
 bun run dev:web     # Frontend only (port 3334)
 bun run dev:rpg     # RPG frontend (port 3340)
 ```
+
+The setup script is idempotent and also builds local workspace packages required by Convex components.
+Re-run it any time after cloning a new worktree or machine.
+To change targets, pass `--deployment`, `--cloud-url`, or `--site-url`.
+
+For a reusable one-command setup skill (env bootstrap + optional agent auth + optional live validation loop):
+
+```bash
+bash .agents/skills/ltcg-complete-setup/scripts/bootstrap.sh \
+  --setup-agent-auth \
+  --verify-live \
+  --live-runs 3
+```
+
+### Local Agent Access (No Privy Login)
+
+For local automation and agent-driven testing, use the API-key path instead of weakening Privy auth:
+
+```bash
+# Register a local agent key and write apps/web/.env.local
+bun run setup:agent-auth -- --agent-name CodexDev
+
+# Start web app
+bun run dev:web
+```
+
+Then open:
+
+`http://localhost:3334/?devAgent=1`
+
+Security boundaries:
+- only active in Vite dev mode (`import.meta.env.DEV`)
+- only active on `localhost` / `127.0.0.1`
+- requires `VITE_DEV_AGENT_API_KEY` in local env (not committed)
+
+### Agent API Match Modes
+
+- Story mode remains CPU-opponent for agent HTTP start flows (`POST /api/agent/game/start`).
+- Agent-vs-agent is explicit PvP:
+  - create lobby: `POST /api/agent/game/pvp/create`
+  - join waiting lobby: `POST /api/agent/game/join`
+- `GET /api/agent/game/view` keeps the same payload shape and now issues a safe internal AI nudge if a CPU turn appears stalled.
 
 ## Telegram Cross-Play Setup
 

@@ -2,6 +2,7 @@ import type { LtcgAgentApiClient } from "../agentApi";
 import type { CardLookup } from "../cardLookup";
 import { appendTimeline } from "../report";
 import { choosePhaseCommand, signature, stripCommandLog, type PlayerView } from "../strategy";
+import type { LiveGameplayAssertion } from "../types";
 
 const MAX_STEPS = 1200;
 const MAX_PHASE_COMMANDS = 25;
@@ -18,6 +19,40 @@ async function performAgentTurn(args: {
 }) {
   const actions: string[] = [];
   let stagnant = 0;
+
+  const attemptFallback = async (opts: {
+    seat: string;
+    baseSignature: string;
+    fallbackType: "ADVANCE_PHASE" | "END_TURN";
+  }) => {
+    const fallbackCommand = { type: opts.fallbackType } as const;
+    actions.push(`fallback ${opts.fallbackType.toLowerCase()}`);
+    await appendTimeline(args.timelinePath, {
+      type: "action",
+      matchId: args.matchId,
+      seat: opts.seat,
+      command: fallbackCommand,
+    });
+
+    try {
+      await args.client.submitAction({
+        matchId: args.matchId,
+        command: fallbackCommand,
+        seat: opts.seat,
+      });
+    } catch (error: any) {
+      await appendTimeline(args.timelinePath, {
+        type: "note",
+        message: `fallback_failed type=${opts.fallbackType} err=${String(error?.message ?? error)}`,
+      });
+      return false;
+    }
+
+    const afterFallback = (await args.client.getView({ matchId: args.matchId })) as PlayerView | null;
+    if (!afterFallback || afterFallback.gameOver) return true;
+    if (!afterFallback.mySeat || afterFallback.currentTurnPlayer !== afterFallback.mySeat) return true;
+    return signature(afterFallback) !== opts.baseSignature;
+  };
 
   for (let step = 0; step < MAX_PHASE_COMMANDS; step += 1) {
     const view = (await args.client.getView({ matchId: args.matchId })) as PlayerView | null;
@@ -66,6 +101,35 @@ async function performAgentTurn(args: {
 
     if (signature(next) === signature(view)) {
       stagnant += 1;
+      const selectedType = String(selected.type ?? "unknown");
+      await appendTimeline(args.timelinePath, {
+        type: "note",
+        message: `no_progress selected=${selectedType} stagnant=${stagnant}`,
+      });
+
+      let progressed = false;
+      if (selectedType !== "END_TURN") {
+        const fallbackOrder: Array<"ADVANCE_PHASE" | "END_TURN"> =
+          selectedType === "ADVANCE_PHASE" ? ["END_TURN"] : ["ADVANCE_PHASE", "END_TURN"];
+        for (const fallbackType of fallbackOrder) {
+          if (
+            await attemptFallback({
+              seat: view.mySeat,
+              baseSignature: signature(next),
+              fallbackType,
+            })
+          ) {
+            progressed = true;
+            break;
+          }
+        }
+      }
+
+      if (progressed) {
+        stagnant = 0;
+        continue;
+      }
+
       if (stagnant >= 2) break;
     } else {
       stagnant = 0;
@@ -82,7 +146,8 @@ export async function runStoryStageScenario(args: {
   chapterId?: string;
   stageNumber?: number;
   maxDurationMs?: number;
-}): Promise<{ matchId: string; completion: any }> {
+}): Promise<{ matchId: string; completion: any; assertions: LiveGameplayAssertion[] }> {
+  const assertions: LiveGameplayAssertion[] = [];
   const chapters = await args.client.getChapters();
   if (!chapters?.length) throw new Error("No chapters available.");
 
@@ -101,6 +166,24 @@ export async function runStoryStageScenario(args: {
     message: `story_start chapter=${String(chapter._id)} stage=${stageNumber}`,
     matchId,
   });
+
+  const initialStatus = await args.client.getMatchStatus(matchId);
+  const storyMode = initialStatus.mode === "story";
+  const cpuOpponent =
+    initialStatus.awayId === "cpu" || initialStatus.hostId === "cpu";
+  assertions.push({
+    id: "story_mode_is_story",
+    ok: storyMode,
+    details: `mode=${String(initialStatus.mode)}`,
+  });
+  assertions.push({
+    id: "story_mode_cpu_opponent",
+    ok: cpuOpponent,
+    details: `hostId=${String(initialStatus.hostId)} awayId=${String(initialStatus.awayId)}`,
+  });
+  if (!storyMode || !cpuOpponent) {
+    throw new Error("story mode must run against built-in CPU opponent");
+  }
 
   let steps = 0;
   let staleTicks = 0;
@@ -122,7 +205,10 @@ export async function runStoryStageScenario(args: {
       type: "view",
       matchId,
       seat: view.mySeat,
+      turn: view.currentTurnPlayer,
       phase: view.currentPhase,
+      priority: view.currentPriorityPlayer,
+      chain: Array.isArray(view.currentChain) ? view.currentChain.length : 0,
       gameOver: Boolean(view.gameOver),
       lp: [Number(view.lifePoints ?? 0), Number(view.opponentLifePoints ?? 0)],
     });
@@ -133,12 +219,55 @@ export async function runStoryStageScenario(args: {
     staleTicks = sig === lastSig ? staleTicks + 1 : 0;
     lastSig = sig;
 
+    const hasOpenChain = Array.isArray(view.currentChain) && view.currentChain.length > 0;
+    const hasChainPriority =
+      hasOpenChain &&
+      Boolean(view.mySeat) &&
+      view.currentPriorityPlayer === view.mySeat;
+    const waitingOnOpponent =
+      Boolean(view.mySeat) &&
+      view.currentTurnPlayer !== view.mySeat &&
+      !hasOpenChain;
+
+    if (waitingOnOpponent && staleTicks >= STALE_GLOBAL_LIMIT) {
+      await appendTimeline(args.timelinePath, {
+        type: "note",
+        message: `stalled_opponent_turn ticks=${staleTicks}`,
+      });
+      throw new Error(`story stage stalled waiting for opponent turn (${staleTicks} ticks)`);
+    }
+
     if (staleTicks >= STALE_GLOBAL_LIMIT) {
       await appendTimeline(args.timelinePath, {
         type: "note",
         message: "stale_state forcing one action attempt",
       });
       staleTicks = 0;
+    }
+
+    if (hasChainPriority && view.mySeat) {
+      const chainResponse = { type: "CHAIN_RESPONSE", pass: true } as const;
+      await appendTimeline(args.timelinePath, {
+        type: "action",
+        matchId,
+        seat: view.mySeat,
+        command: chainResponse,
+      });
+      try {
+        await args.client.submitAction({
+          matchId,
+          command: chainResponse,
+          seat: view.mySeat,
+        });
+      } catch (error: any) {
+        await appendTimeline(args.timelinePath, {
+          type: "note",
+          message: `chain_response_failed err=${String(error?.message ?? error)}`,
+        });
+      }
+      steps += 1;
+      await sleep(60);
+      continue;
     }
 
     if (view.mySeat && view.currentTurnPlayer === view.mySeat) {
@@ -168,5 +297,5 @@ export async function runStoryStageScenario(args: {
     message: `story_complete ok`,
   });
 
-  return { matchId, completion };
+  return { matchId, completion, assertions };
 }

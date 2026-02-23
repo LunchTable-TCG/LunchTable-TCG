@@ -833,7 +833,14 @@ export declare const components: {
       startMatch: FunctionReference<
         "mutation",
         "internal",
-        { initialState: string; matchId: string },
+        {
+          configAllowlist?: {
+            pongEnabled?: boolean;
+            redemptionEnabled?: boolean;
+          };
+          initialState: string;
+          matchId: string;
+        },
         null
       >;
       submitAction: FunctionReference<

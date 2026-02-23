@@ -314,6 +314,24 @@ corsRoute({
 });
 
 corsRoute({
+	path: "/api/agent/game/pvp/create",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		try {
+			const result = await ctx.runMutation(api.agentAuth.agentCreatePvpLobby, {
+				agentUserId: agent.userId,
+			});
+			return jsonResponse(result);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+corsRoute({
 	path: "/api/agent/game/join",
 	method: "POST",
 	handler: async (ctx, request) => {
@@ -432,19 +450,32 @@ corsRoute({
 			));
 		} catch (e: any) {
 			return errorResponse(e.message, 422);
-			}
+		}
 
+		try {
+			// Keep view reads actor-scoped for the same reason as submitAction:
+			// HTTP routes are unauthenticated at the Convex mutation/query layer.
+			const view = await ctx.runQuery(internal.game.getPlayerViewAsActor, {
+				matchId,
+				seat,
+				actorUserId: agent.userId,
+			});
+			if (!view) return errorResponse("Match state not found", 404);
+
+			// getPlayerView returns a JSON string — parse before wrapping.
+			const parsed = typeof view === "string" ? JSON.parse(view) : view;
+
+			// Dual guardrail: non-fatal nudge to ensure CPU turns resume if scheduler
+			// drift or no-op AI commands left the match waiting on the AI seat.
 			try {
-				// Keep view reads actor-scoped for the same reason as submitAction:
-				// HTTP routes are unauthenticated at the Convex mutation/query layer.
-				const view = await ctx.runQuery(internal.game.getPlayerViewAsActor, {
+				await ctx.runMutation(internal.game.nudgeAITurnAsActor, {
 					matchId,
-					seat,
 					actorUserId: agent.userId,
 				});
-			if (!view) return errorResponse("Match state not found", 404);
-			// getPlayerView returns a JSON string — parse before wrapping
-			const parsed = typeof view === "string" ? JSON.parse(view) : view;
+			} catch {
+				// Keep view endpoint read contract stable even if recovery nudge fails.
+			}
+
 			return jsonResponse(parsed);
 		} catch (e: any) {
 			return errorResponse(e.message, 422);

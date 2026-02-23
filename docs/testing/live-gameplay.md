@@ -11,8 +11,11 @@ This repo includes a live gameplay harness that validates real match flows end-t
 `core` suite:
 - Start + complete story stage 1
 - Start + finish a quick duel
+- Start + finish an agent-vs-agent PvP lobby match
 - Validate public spectator endpoints return consistent seat + event ordering
 - Validate invalid seat actions are rejected with a 422 contract
+
+Story stage validation also asserts story mode is CPU-opponent (`mode=story`, one seat is `cpu`).
 
 `full` suite:
 - `core`, plus additional story stages (default 3 total stages; controlled by `LTCG_FULL_STAGES`)
@@ -32,8 +35,10 @@ Artifacts are written to `artifacts/live-gameplay/<runId>/`.
 - `LTCG_LIVE_REQUIRED=1` (optional): fail the run if no API URL is configured (default is skip).
   - The suite also skips by default if the API URL is configured but not reachable.
   - Skip runs still emit `report.json` with `status: "skip"` and `skipReason`.
-- `LTCG_SCENARIO_TIMEOUT_MS` (optional): per-scenario wall-clock timeout in milliseconds (default `60000`).
+- `LTCG_SCENARIO_TIMEOUT_MS` (optional): per-scenario wall-clock timeout in milliseconds (default `120000`).
   - Prevents non-terminating live scenarios from hanging CI/local runs.
+- `LTCG_SCENARIO_RETRIES` (optional): retries per scenario after a timeout/failure (default `1`).
+  - Helps absorb transient Convex scheduler variance in live runs.
 
 ## Local Validation
 
@@ -54,8 +59,24 @@ bun run test:live:core
 Optional CLI override:
 
 ```bash
-bun run test:live:core -- --scenario-timeout-ms=60000
+bun run test:live:core -- --scenario-timeout-ms=120000
+
+# Optional: increase retries for noisy environments
+bun run test:live:core -- --scenario-timeout-ms=120000 --retries=2
 ```
+
+Recommended pre-deploy reliability gate (3 consecutive full passes):
+
+```bash
+for run in 1 2 3; do
+  echo "=== live core run ${run}/3 ==="
+  LTCG_API_URL="https://<deployment>.convex.site" \
+  LTCG_LIVE_REQUIRED=1 \
+  bun run test:live:core
+done
+```
+
+Passing means no scenario timeout and no `stalled_opponent_turn` failures.
 
 API-only mode:
 

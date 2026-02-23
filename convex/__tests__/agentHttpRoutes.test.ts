@@ -24,6 +24,9 @@ describe("agent HTTP routes", () => {
     expect(httpSource).toMatch(
       /path:\s*"\/api\/agent\/game\/view"[\s\S]*?ctx\.runQuery\(\s*internal\.game\.getPlayerViewAsActor\s*,\s*\{[\s\S]*?actorUserId:\s*agent\.userId/,
     );
+    expect(httpSource).toMatch(
+      /path:\s*"\/api\/agent\/game\/view"[\s\S]*?ctx\.runMutation\(\s*internal\.game\.nudgeAITurnAsActor\s*,\s*\{[\s\S]*?actorUserId:\s*agent\.userId/,
+    );
   });
 
   it("uses internal getMatchMetaAsActor for participant-scoped metadata reads", () => {
@@ -31,6 +34,15 @@ describe("agent HTTP routes", () => {
 
     expect(httpSource).toMatch(
       /resolveMatchAndSeat[\s\S]*?ctx\.runQuery\(\s*internal\.game\.getMatchMetaAsActor\s*,\s*\{[\s\S]*?actorUserId:\s*agentUserId/,
+    );
+  });
+
+  it("exposes a dedicated agent PvP lobby create route", () => {
+    const httpSource = readSource("convex/http.ts");
+
+    expect(httpSource).toContain('path: "/api/agent/game/pvp/create"');
+    expect(httpSource).toMatch(
+      /path:\s*"\/api\/agent\/game\/pvp\/create"[\s\S]*?ctx\.runMutation\(\s*api\.agentAuth\.agentCreatePvpLobby\s*,\s*\{[\s\S]*?agentUserId:\s*agent\.userId/,
     );
   });
 });

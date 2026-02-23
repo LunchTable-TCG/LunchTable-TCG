@@ -30,6 +30,31 @@ export function deriveIframeEmbedFlags({
   return { isEmbedded };
 }
 
+export function deriveDevAgentApiKey({
+  isDev,
+  hostname,
+  searchParams,
+  envApiKey,
+}: {
+  isDev: boolean;
+  hostname: string;
+  searchParams: URLSearchParams;
+  envApiKey: string | null | undefined;
+}) {
+  if (!isDev) return null;
+  const normalizedHost = hostname.toLowerCase();
+  const isLocalHost = normalizedHost === "localhost" || normalizedHost === "127.0.0.1";
+  if (!isLocalHost) return null;
+
+  const devAgentFlag = searchParams.get("devAgent");
+  const devAgentEnabled = devAgentFlag === "1" || devAgentFlag === "true";
+  if (!devAgentEnabled) return null;
+
+  const apiKey = (envApiKey ?? "").trim();
+  if (!apiKey.startsWith("ltcg_")) return null;
+  return apiKey;
+}
+
 /**
  * Detect if the app is running inside an iframe (milaidy) or with
  * ?embedded=true query param, and manage the postMessage handshake.
@@ -52,7 +77,18 @@ export function useIframeMode() {
     isDiscordActivity,
   });
 
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const searchParams =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+  const devAgentApiKey = deriveDevAgentApiKey({
+    isDev: import.meta.env.DEV,
+    hostname: typeof window !== "undefined" ? window.location.hostname : "",
+    searchParams,
+    envApiKey: import.meta.env.VITE_DEV_AGENT_API_KEY,
+  });
+
+  const [authToken, setAuthToken] = useState<string | null>(devAgentApiKey);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [startMatchCommand, setStartMatchCommand] = useState<StartMatchPayload | null>(null);
   const [skipCutsceneVersion, setSkipCutsceneVersion] = useState(0);

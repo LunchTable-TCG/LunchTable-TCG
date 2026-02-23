@@ -1545,8 +1545,12 @@ export function buildAIDeck(allCards: any[]): string[] {
   return deck.slice(0, 40);
 }
 
-function resolveAICupSeat(meta: any): "host" | "away" | null {
-  if (!meta || !(meta as any)?.isAIOpponent) return null;
+function hasCpuOpponent(meta: any) {
+  return Boolean(meta && ((meta as any)?.hostId === "cpu" || (meta as any)?.awayId === "cpu"));
+}
+
+function resolveCpuSeat(meta: any): "host" | "away" | null {
+  if (!hasCpuOpponent(meta)) return null;
   if ((meta as any)?.hostId === "cpu") return "host";
   if ((meta as any)?.awayId === "cpu") return "away";
   return null;
@@ -2046,11 +2050,11 @@ async function submitActionForActor(
   // Schedule AI turn only if: game is active, it's an AI match, and
   // this was the human action (i.e., not AI seat) that didn't end the game.
   const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
-  const aiSeat = resolveAICupSeat(meta);
+  const aiSeat = resolveCpuSeat(meta);
   if (
     (meta as any)?.status === "active" &&
     aiSeat &&
-    (meta as any)?.isAIOpponent &&
+    hasCpuOpponent(meta) &&
     args.seat !== aiSeat
   ) {
     let events: any[] = [];
@@ -2063,7 +2067,7 @@ async function submitActionForActor(
     if (!gameOver) {
       const queued = await queueAITurn(ctx, args.matchId);
       if (queued) {
-        await ctx.scheduler.runAfter(500, internal.game.executeAITurn, {
+        await scheduleAITurnProcess(ctx, 500, {
           matchId: args.matchId,
         });
       }
@@ -2186,6 +2190,101 @@ export const submitActionWithClientForUser = internalMutation({
       expectedVersion: args.expectedVersion,
       actorUserId: args.userId,
     }),
+});
+
+function parseMatchEvents(eventsPayload: unknown): any[] {
+  if (typeof eventsPayload !== "string") return [];
+  try {
+    const parsed = JSON.parse(eventsPayload);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function getParsedPlayerViewForSeat(
+  ctx: any,
+  matchId: string,
+  seat: "host" | "away",
+) {
+  try {
+    const rawView = await match.getPlayerView(ctx, { matchId, seat });
+    if (!rawView) return null;
+    return JSON.parse(rawView);
+  } catch {
+    return null;
+  }
+}
+
+function buildAITurnProgressSignature(view: any) {
+  const toCardFingerprint = (entry: any) =>
+    `${entry?.cardId ?? entry?.instanceId ?? "?"}:${entry?.definitionId ?? "?"}:${
+      entry?.faceDown ? "fd" : "fu"
+    }:${entry?.canAttack ? 1 : 0}:${entry?.hasAttackedThisTurn ? 1 : 0}`;
+
+  return JSON.stringify({
+    turn: view?.currentTurnPlayer ?? null,
+    phase: view?.currentPhase ?? null,
+    priority: view?.currentPriorityPlayer ?? null,
+    chainDepth: Array.isArray(view?.currentChain) ? view.currentChain.length : 0,
+    hand: Array.isArray(view?.hand) ? view.hand.join(",") : "",
+    board: Array.isArray(view?.board) ? view.board.map(toCardFingerprint).join("|") : "",
+    opponentBoard: Array.isArray(view?.opponentBoard)
+      ? view.opponentBoard.map(toCardFingerprint).join("|")
+      : "",
+    spellTrap: Array.isArray(view?.spellTrapZone)
+      ? view.spellTrapZone.map(toCardFingerprint).join("|")
+      : "",
+    lifePoints: view?.lifePoints ?? null,
+    opponentLifePoints: view?.opponentLifePoints ?? null,
+    gameOver: Boolean(view?.gameOver),
+  });
+}
+
+function isHumanHoldingChainPriority(view: any, aiSeat: "host" | "away") {
+  return (
+    Array.isArray(view?.currentChain) &&
+    view.currentChain.length > 0 &&
+    view.currentPriorityPlayer &&
+    view.currentPriorityPlayer !== aiSeat
+  );
+}
+
+function isActiveAITurn(view: any, aiSeat: "host" | "away") {
+  return Boolean(view && !view.gameOver && view.currentTurnPlayer === aiSeat);
+}
+
+export const nudgeAITurnAsActor = internalMutation({
+  args: {
+    matchId: v.string(),
+    actorUserId: v.id("users"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { meta } = await requireMatchParticipant(
+      ctx,
+      args.matchId,
+      undefined,
+      args.actorUserId,
+    );
+
+    const aiSeat = resolveCpuSeat(meta);
+    if ((meta as any)?.status !== "active" || !aiSeat || !hasCpuOpponent(meta)) {
+      return null;
+    }
+
+    const aiView = await getParsedPlayerViewForSeat(ctx, args.matchId, aiSeat);
+    if (!isActiveAITurn(aiView, aiSeat)) return null;
+    if (isHumanHoldingChainPriority(aiView, aiSeat)) return null;
+
+    const queued = await queueAITurn(ctx, args.matchId);
+    if (queued) {
+      await scheduleAITurnProcess(ctx, 500, {
+        matchId: args.matchId,
+      });
+    }
+    return null;
+  },
 });
 
 // ── AI Decision Logic ──────────────────────────────────────────────
@@ -2381,6 +2480,19 @@ const AI_CHAIN_DELAY_MS = 800;
 /** Max actions per AI turn to prevent infinite loops */
 const AI_MAX_ACTIONS = 20;
 
+function shouldScheduleBackgroundAITurn() {
+  return process.env.VITEST !== "true" && process.env.NODE_ENV !== "test";
+}
+
+async function scheduleAITurnProcess(
+  ctx: any,
+  delayMs: number,
+  args: { matchId: string; stepsRemaining?: number },
+) {
+  if (!shouldScheduleBackgroundAITurn()) return;
+  await ctx.scheduler.runAfter(delayMs, internal.game.executeAITurn, args);
+}
+
 export const executeAITurn = internalMutation({
   args: {
     matchId: v.string(),
@@ -2401,26 +2513,11 @@ export const executeAITurn = internalMutation({
 
     // Guard: check it's still AI's turn before acting.
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
-    const aiSeat = resolveAICupSeat(meta);
+    const aiSeat = resolveCpuSeat(meta);
     if ((meta as any)?.status !== "active" || !aiSeat) return null;
 
-    let viewJson: string | null = null;
-    try {
-      viewJson = await match.getPlayerView(ctx, {
-        matchId: args.matchId,
-        seat: aiSeat,
-      });
-    } catch {
-      return null;
-    }
-    if (!viewJson) return null;
-
-    let view: any;
-    try {
-      view = JSON.parse(viewJson);
-    } catch {
-      return null;
-    }
+    const view = await getParsedPlayerViewForSeat(ctx, args.matchId, aiSeat);
+    if (!view) return null;
 
     // Stop if game is over or no longer AI's turn
     if (view.gameOver || view.currentTurnPlayer !== aiSeat) return null;
@@ -2433,8 +2530,9 @@ export const executeAITurn = internalMutation({
         return null;
       }
 
+      let chainResult: any;
       try {
-        await match.submitAction(ctx, {
+        chainResult = await match.submitAction(ctx, {
           matchId: args.matchId,
           command: JSON.stringify({ type: "CHAIN_RESPONSE", pass: true }),
           seat: aiSeat,
@@ -2443,8 +2541,19 @@ export const executeAITurn = internalMutation({
         return null;
       }
 
+      const chainEvents = parseMatchEvents(chainResult?.events);
+      const chainView = await getParsedPlayerViewForSeat(ctx, args.matchId, aiSeat);
+      const chainProgressed =
+        chainEvents.length > 0 ||
+        (chainView &&
+          buildAITurnProgressSignature(chainView) !==
+            buildAITurnProgressSignature(view));
+      if (!chainProgressed) {
+        return null;
+      }
+
       // Schedule next step with shorter delay for chain resolution
-      await ctx.scheduler.runAfter(AI_CHAIN_DELAY_MS, internal.game.executeAITurn, {
+      await scheduleAITurnProcess(ctx, AI_CHAIN_DELAY_MS, {
         matchId: args.matchId,
         stepsRemaining: stepsLeft - 1,
       });
@@ -2454,22 +2563,70 @@ export const executeAITurn = internalMutation({
     // Pick and execute ONE action
     const cardLookup = await getCachedCardLookup(ctx);
     const command = pickAICommand(view, cardLookup);
+    const beforeSignature = buildAITurnProgressSignature(view);
 
-    try {
-      await match.submitAction(ctx, {
-        matchId: args.matchId,
-        command: JSON.stringify(command),
-        seat: aiSeat,
-      });
-    } catch {
-      return null;
+    const submitCommand = async (candidate: Command) => {
+      try {
+        const result = await match.submitAction(ctx, {
+          matchId: args.matchId,
+          command: JSON.stringify(candidate),
+          seat: aiSeat,
+        });
+        const nextView = await getParsedPlayerViewForSeat(ctx, args.matchId, aiSeat);
+        return {
+          ok: true,
+          events: parseMatchEvents(result?.events),
+          nextView,
+        };
+      } catch {
+        return {
+          ok: false,
+          events: [] as any[],
+          nextView: await getParsedPlayerViewForSeat(ctx, args.matchId, aiSeat),
+        };
+      }
+    };
+
+    let executedCommand = command;
+    let actionResult = await submitCommand(command);
+    const actionProgressed =
+      actionResult.events.length > 0 ||
+      (actionResult.nextView &&
+        buildAITurnProgressSignature(actionResult.nextView) !== beforeSignature);
+
+    if (!actionResult.ok || !actionProgressed) {
+      const fallbackTypes: Array<Command["type"]> = ["ADVANCE_PHASE", "END_TURN"];
+      let recovered = false;
+      for (const fallbackType of fallbackTypes) {
+        if (fallbackType === command.type) continue;
+        const fallbackCommand = { type: fallbackType } as Command;
+        const fallbackResult = await submitCommand(fallbackCommand);
+        const fallbackProgressed =
+          fallbackResult.events.length > 0 ||
+          (fallbackResult.nextView &&
+            buildAITurnProgressSignature(fallbackResult.nextView) !== beforeSignature);
+        if (fallbackResult.ok && fallbackProgressed) {
+          executedCommand = fallbackCommand;
+          actionResult = fallbackResult;
+          recovered = true;
+          break;
+        }
+      }
+      if (!recovered) {
+        return null;
+      }
     }
 
-    // If command was END_TURN, stop
-    if (command.type === "END_TURN") return null;
+    // If command was END_TURN, stop.
+    if (executedCommand.type === "END_TURN") return null;
+
+    const postActionView = actionResult.nextView;
+    if (!postActionView) return null;
+    if (!isActiveAITurn(postActionView, aiSeat)) return null;
+    if (isHumanHoldingChainPriority(postActionView, aiSeat)) return null;
 
     // Schedule next action with visible delay
-    await ctx.scheduler.runAfter(AI_ACTION_DELAY_MS, internal.game.executeAITurn, {
+    await scheduleAITurnProcess(ctx, AI_ACTION_DELAY_MS, {
       matchId: args.matchId,
       stepsRemaining: stepsLeft - 1,
     });
@@ -3352,7 +3509,7 @@ export const checkPvpDisconnect = internalMutation({
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     if (!meta || (meta as any).status !== "active") return null;
     if ((meta as any).mode !== "pvp") return null;
-    if ((meta as any).isAIOpponent) return null;
+    if (hasCpuOpponent(meta)) return null;
 
     const now = Date.now();
     const hostId = (meta as any).hostId as string;

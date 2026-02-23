@@ -14,6 +14,7 @@ export type PlayerView = {
   currentTurnPlayer?: Seat;
   currentPhase?: string;
   currentChain?: unknown[];
+  currentPriorityPlayer?: Seat;
   mySeat?: Seat;
   turnNumber?: number;
   gameOver?: boolean;
@@ -52,16 +53,24 @@ function chooseMainPhaseCommand(view: PlayerView, cardLookup: CardLookup) {
   const boardCount = (view.board ?? []).filter(Boolean).length;
   const maxSlots = typeof view.maxBoardSlots === "number" ? view.maxBoardSlots : 5;
 
-  if (boardCount < maxSlots && monsters.length > 0) {
-    const candidate = monsters[0]!;
-    const tribute = candidate.level >= 7 ? pickTributeCards(view, cardLookup) : undefined;
-    return {
-      type: "SUMMON" as const,
-      cardId: candidate.cardId,
-      position: "attack" as const,
-      tributeCardIds: tribute,
-      _log: `summon ${cardName(cardLookup, candidate.cardId)} (lvl ${candidate.level})`,
-    };
+  if (monsters.length > 0) {
+    for (const candidate of monsters) {
+      const requiresTribute = candidate.level >= 7;
+      const tribute = requiresTribute ? pickTributeCards(view, cardLookup) : undefined;
+      const hasTribute = !requiresTribute || Boolean(tribute?.length);
+
+      // Tribute summons can still be legal at full board because tribute frees a slot.
+      const hasBoardSpace = boardCount < maxSlots || requiresTribute;
+      if (!hasBoardSpace || !hasTribute) continue;
+
+      return {
+        type: "SUMMON" as const,
+        cardId: candidate.cardId,
+        position: "attack" as const,
+        tributeCardIds: tribute,
+        _log: `summon ${cardName(cardLookup, candidate.cardId)} (lvl ${candidate.level})`,
+      };
+    }
   }
 
   const backrow = (view.hand ?? []).find((cardId) => {
@@ -134,6 +143,16 @@ function chooseCombatCommand(view: PlayerView, cardLookup: CardLookup) {
 }
 
 export function choosePhaseCommand(view: PlayerView, cardLookup: CardLookup) {
+  if (
+    Array.isArray(view.currentChain) &&
+    view.currentChain.length > 0 &&
+    view.currentPriorityPlayer &&
+    view.mySeat &&
+    view.currentPriorityPlayer === view.mySeat
+  ) {
+    return { type: "CHAIN_RESPONSE" as const, pass: true, _log: "chain pass" };
+  }
+
   if (["draw", "standby", "breakdown_check", "end"].includes(view.currentPhase ?? "")) {
     return { type: "ADVANCE_PHASE" as const, _log: "advance phase" };
   }
@@ -157,6 +176,7 @@ export function stripCommandLog(command: Record<string, unknown> & { _log?: stri
 export function signature(view: PlayerView) {
   return JSON.stringify({
     turn: view.currentTurnPlayer,
+    priority: view.currentPriorityPlayer,
     phase: view.currentPhase,
     hand: [...(view.hand ?? [])].sort().join(","),
     boardCount: view.board?.length ?? 0,
@@ -167,4 +187,3 @@ export function signature(view: PlayerView) {
     gameOver: view.gameOver ?? false,
   });
 }
-

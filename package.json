@@ -9,6 +9,8 @@
     "packages/*"
   ],
   "scripts": {
+    "setup:env": "bash scripts/setup-dev-env.sh",
+    "setup:agent-auth": "bash scripts/setup-dev-agent-auth.sh",
     "build": "cd apps/web && bun run build && cd ../.. && bun run check:bundle-metrics",
     "dev": "concurrently -n convex,web -c blue,magenta \"bun run dev:convex\" \"bun run dev:web\"",
     "dev:convex": "bash scripts/convex-dev.sh dev",

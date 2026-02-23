@@ -64,6 +64,14 @@ export type MatchStatus = {
   starsEarned: number | null;
 };
 
+export type PvpLobbyCreateResult = {
+  matchId: string;
+  visibility: "public";
+  joinCode: null;
+  status: "waiting";
+  createdAt: number;
+};
+
 export class LtcgAgentApiClient {
   readonly baseUrl: string;
   readonly apiKey: string | null;
@@ -156,6 +164,10 @@ export class LtcgAgentApiClient {
 
   async startDuel(): Promise<{ matchId: string }> {
     return await this.requestJson("POST", "/api/agent/game/start-duel", {});
+  }
+
+  async createPvpLobby(): Promise<PvpLobbyCreateResult> {
+    return await this.requestJson("POST", "/api/agent/game/pvp/create", {});
   }
 
   async joinMatch(matchId: string): Promise<any> {
