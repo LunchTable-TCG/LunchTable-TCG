@@ -22,7 +22,6 @@ type MatchMeta = {
   hostId: string;
   awayId: string;
   mode: string;
-  isAIOpponent?: boolean;
   winner?: string;
 };
 
@@ -487,7 +486,6 @@ function resolvePlayerSeat(
 
 function isCpuStoryMatch(meta: MatchMeta | null | undefined): boolean {
   if (!meta || meta.mode !== "story") return false;
-  if (meta.isAIOpponent) return true;
   return meta.hostId === "cpu" || meta.awayId === "cpu";
 }
 

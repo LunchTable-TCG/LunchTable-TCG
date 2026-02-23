@@ -1819,9 +1819,7 @@ async function submitActionForActor(
     if (!gameOver) {
       const queued = await queueAITurn(ctx, args.matchId);
       if (queued) {
-        await ctx.scheduler.runAfter(500, internal.game.executeAITurn, {
-          matchId: args.matchId,
-        });
+        await scheduleAITurnProcess(ctx, 500, { matchId: args.matchId });
       }
     }
   }
@@ -1942,6 +1940,57 @@ export const submitActionWithClientForUser = internalMutation({
       expectedVersion: args.expectedVersion,
       actorUserId: args.userId,
     }),
+});
+
+export const nudgeAITurnAsActor = internalMutation({
+  args: {
+    matchId: v.string(),
+    actorUserId: v.id("users"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { meta } = await requireMatchParticipant(
+      ctx,
+      args.matchId,
+      undefined,
+      args.actorUserId,
+    );
+
+    const aiSeat = resolveAICupSeat(meta);
+    if ((meta as any)?.status !== "active" || !aiSeat || !(meta as any)?.isAIOpponent) {
+      return null;
+    }
+
+    let aiView: any = null;
+    try {
+      const rawView = await match.getPlayerView(ctx, {
+        matchId: args.matchId,
+        seat: aiSeat,
+      });
+      aiView = rawView ? JSON.parse(rawView) : null;
+    } catch {
+      return null;
+    }
+
+    if (!aiView || aiView.gameOver || aiView.currentTurnPlayer !== aiSeat) {
+      return null;
+    }
+
+    if (
+      Array.isArray(aiView.currentChain) &&
+      aiView.currentChain.length > 0 &&
+      aiView.currentPriorityPlayer &&
+      aiView.currentPriorityPlayer !== aiSeat
+    ) {
+      return null;
+    }
+
+    const queued = await queueAITurn(ctx, args.matchId);
+    if (queued) {
+      await scheduleAITurnProcess(ctx, 500, { matchId: args.matchId });
+    }
+    return null;
+  },
 });
 
 // ── AI Decision Logic ──────────────────────────────────────────────
@@ -2132,6 +2181,19 @@ const AI_CHAIN_DELAY_MS = 800;
 /** Max actions per AI turn to prevent infinite loops */
 const AI_MAX_ACTIONS = 20;
 
+function shouldScheduleBackgroundAITurn() {
+  return process.env.VITEST !== "true" && process.env.NODE_ENV !== "test";
+}
+
+async function scheduleAITurnProcess(
+  ctx: any,
+  delayMs: number,
+  args: { matchId: string; stepsRemaining?: number },
+) {
+  if (!shouldScheduleBackgroundAITurn()) return;
+  await ctx.scheduler.runAfter(delayMs, internal.game.executeAITurn, args);
+}
+
 export const executeAITurn = internalMutation({
   args: {
     matchId: v.string(),
@@ -2197,7 +2259,7 @@ export const executeAITurn = internalMutation({
       }
 
       // Schedule next step with shorter delay for chain resolution
-      await ctx.scheduler.runAfter(AI_CHAIN_DELAY_MS, internal.game.executeAITurn, {
+      await scheduleAITurnProcess(ctx, AI_CHAIN_DELAY_MS, {
         matchId: args.matchId,
         stepsRemaining: stepsLeft - 1,
       });
@@ -2224,7 +2286,7 @@ export const executeAITurn = internalMutation({
     if (command.type === "END_TURN") return null;
 
     // Schedule next action with visible delay
-    await ctx.scheduler.runAfter(AI_ACTION_DELAY_MS, internal.game.executeAITurn, {
+    await scheduleAITurnProcess(ctx, AI_ACTION_DELAY_MS, {
       matchId: args.matchId,
       stepsRemaining: stepsLeft - 1,
     });

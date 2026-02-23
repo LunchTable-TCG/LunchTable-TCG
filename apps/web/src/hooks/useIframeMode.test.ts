@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveIframeEmbedFlags } from "./useIframeMode";
+import { deriveDevAgentApiKey, deriveIframeEmbedFlags } from "./useIframeMode";
 
 describe("deriveIframeEmbedFlags", () => {
   it("treats ?embedded=true as embedded even when not in an iframe", () => {
@@ -33,3 +33,34 @@ describe("deriveIframeEmbedFlags", () => {
   });
 });
 
+describe("deriveDevAgentApiKey", () => {
+  it("returns key only when dev+localhost+devAgent flag are set", () => {
+    const result = deriveDevAgentApiKey({
+      isDev: true,
+      hostname: "localhost",
+      searchParams: new URLSearchParams("devAgent=1"),
+      envApiKey: "ltcg_test_key",
+    });
+    expect(result).toBe("ltcg_test_key");
+  });
+
+  it("returns null outside local hosts", () => {
+    const result = deriveDevAgentApiKey({
+      isDev: true,
+      hostname: "lunchtable.app",
+      searchParams: new URLSearchParams("devAgent=1"),
+      envApiKey: "ltcg_test_key",
+    });
+    expect(result).toBeNull();
+  });
+
+  it("returns null when key format is invalid", () => {
+    const result = deriveDevAgentApiKey({
+      isDev: true,
+      hostname: "localhost",
+      searchParams: new URLSearchParams("devAgent=1"),
+      envApiKey: "bad_key",
+    });
+    expect(result).toBeNull();
+  });
+});

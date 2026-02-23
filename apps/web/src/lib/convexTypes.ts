@@ -25,7 +25,6 @@ export type MatchMeta = {
   endReason?: string;
   hostDeck: string[];
   awayDeck?: string[] | null;
-  isAIOpponent: boolean;
   createdAt: number;
   startedAt?: number;
   endedAt?: number;

@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,8 +31,13 @@ function initTempRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), "ltcg-script-test-"));
   tempDirs.push(dir);
 
+  mkdirSync(path.join(dir, "scripts"), { recursive: true });
   cpSync(path.join(process.cwd(), "cleanup.sh"), path.join(dir, "cleanup.sh"));
   cpSync(path.join(process.cwd(), "fix-packages.sh"), path.join(dir, "fix-packages.sh"));
+  cpSync(
+    path.join(process.cwd(), "scripts/setup-dev-env.sh"),
+    path.join(dir, "scripts/setup-dev-env.sh"),
+  );
 
   mkdirSync(path.join(dir, ".github/workflows"), { recursive: true });
   mkdirSync(path.join(dir, "apps/web/src/components/game/hooks"), { recursive: true });
@@ -32,6 +45,7 @@ function initTempRepo() {
   mkdirSync(path.join(dir, "api"), { recursive: true });
 
   writeFileSync(path.join(dir, "package.json"), "{\n  \"name\": \"test\"\n}\n");
+  writeFileSync(path.join(dir, "apps/web/package.json"), "{\n  \"name\": \"web\"\n}\n");
 
   expect(runCommand(dir, "git", ["init", "-q"]).status).toBe(0);
   expect(runCommand(dir, "git", ["config", "user.email", "test@example.com"]).status).toBe(0);
@@ -103,5 +117,38 @@ describe("fix-packages.sh", () => {
     expect(existsSync(path.join(dir, "node_modules"))).toBe(false);
     expect(existsSync(path.join(dir, "apps/web/node_modules"))).toBe(false);
     expect(existsSync(path.join(dir, "bun.lockb"))).toBe(false);
+  });
+});
+
+describe("scripts/setup-dev-env.sh", () => {
+  it("writes Convex env values without requiring installs in test mode", () => {
+    const dir = initTempRepo();
+
+    const result = runCommand(dir, "bash", [
+      "scripts/setup-dev-env.sh",
+      "--deployment",
+      "scintillating-mongoose-458",
+      "--skip-install",
+      "--skip-convex-check",
+      "--skip-bun-install",
+      "--skip-workspace-build",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("CONVEX_DEPLOYMENT=scintillating-mongoose-458");
+    expect(result.stdout).toContain(
+      "VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud",
+    );
+    expect(result.stdout).toContain(
+      "LTCG_API_URL=https://scintillating-mongoose-458.convex.site",
+    );
+
+    const rootEnv = readFileSync(path.join(dir, ".env.local"), "utf8");
+    expect(rootEnv).toContain("CONVEX_DEPLOYMENT=scintillating-mongoose-458");
+    expect(rootEnv).toContain("VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud");
+    expect(rootEnv).toContain("LTCG_API_URL=https://scintillating-mongoose-458.convex.site");
+
+    const webEnv = readFileSync(path.join(dir, "apps/web/.env.local"), "utf8");
+    expect(webEnv).toContain("VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud");
   });
 });
