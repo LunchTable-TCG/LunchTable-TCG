@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { lazy, Suspense, useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "@/router/react-router";
 import { useGameState, type Seat } from "./hooks/useGameState";
 import { useGameActions } from "./hooks/useGameActions";
@@ -21,7 +21,6 @@ import { FieldRow } from "./FieldRow";
 import { SpellTrapRow } from "./SpellTrapRow";
 import { GameMotionOverlay } from "./GameMotionOverlay";
 import { GameEffectsLayer } from "./GameEffectsLayer";
-import { PongOverlay } from "./pong/PongOverlay";
 import { GameLog } from "./GameLog";
 import { TurnBanner } from "./TurnBanner";
 import { AnimatePresence } from "framer-motion";
@@ -31,6 +30,10 @@ import type { Phase } from "./types";
 const MAX_BOARD_SLOTS = 3;
 const MAX_SPELL_TRAP_SLOTS = 3;
 const FRAME_MS = 1000 / 60;
+const LazyPongOverlay = lazy(async () => {
+  const module = await import("./pong/PongOverlay");
+  return { default: module.PongOverlay };
+});
 
 const AMBIENT_MOTES = Array.from({ length: 10 }, (_, i) => ({
   id: i,
@@ -1344,20 +1347,24 @@ export function GameBoard({
 
       {/* Beer Pong Overlay */}
       {view.pendingPong && view.pendingPong.seat === seat && (
-        <PongOverlay
-          mode="combat"
-          cardName={getDefinitionById(view.pendingPong.destroyedCardId, null)?.name ?? "Unknown Card"}
-          onResult={(result) => actions.pongShoot(view.pendingPong!.destroyedCardId, result)}
-          onDecline={() => actions.pongDecline(view.pendingPong!.destroyedCardId)}
-        />
+        <Suspense fallback={null}>
+          <LazyPongOverlay
+            mode="combat"
+            cardName={getDefinitionById(view.pendingPong.destroyedCardId, null)?.name ?? "Unknown Card"}
+            onResult={(result) => actions.pongShoot(view.pendingPong!.destroyedCardId, result)}
+            onDecline={() => actions.pongDecline(view.pendingPong!.destroyedCardId)}
+          />
+        </Suspense>
       )}
       {view.pendingRedemption && view.pendingRedemption.seat === seat && (
-        <PongOverlay
-          mode="redemption"
-          cardName=""
-          onResult={(result) => actions.redemptionShoot(result)}
-          onDecline={() => actions.redemptionDecline()}
-        />
+        <Suspense fallback={null}>
+          <LazyPongOverlay
+            mode="redemption"
+            cardName=""
+            onResult={(result) => actions.redemptionShoot(result)}
+            onDecline={() => actions.redemptionDecline()}
+          />
+        </Suspense>
       )}
 
       {/* Target Selector Overlay */}
