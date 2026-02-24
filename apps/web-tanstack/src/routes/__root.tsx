@@ -18,7 +18,7 @@ import { DefaultCatchBoundary } from "~/components/DefaultCatchBoundary";
 import { NotFound } from "~/components/NotFound";
 import type { RouterContext } from "~/routerContext";
 import appCss from "~/styles/app.css?url";
-import legacyCss from "~/styles/legacy.css?url";
+import experienceCss from "~/styles/experience.css?url";
 import { AudioContextGate, AudioControlsDock, AudioProvider, useAudio } from "@/components/audio/AudioProvider";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { PrivyAuthProvider } from "@/components/auth/PrivyAuthProvider";
@@ -78,7 +78,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "stylesheet", href: legacyCss },
+      { rel: "stylesheet", href: experienceCss },
       { rel: "icon", href: "/favicon.ico" },
     ],
   }),
@@ -126,7 +126,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               <PrivyAuthProvider>
                 <ConvexProviderWithAuth client={convexClient} useAuth={usePrivyAuthForConvex}>
                   <AudioProvider>
-                    <LegacyRuntime>{children}</LegacyRuntime>
+                    <AppRuntime>{children}</AppRuntime>
                   </AudioProvider>
                 </ConvexProviderWithAuth>
               </PrivyAuthProvider>
@@ -146,7 +146,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LegacyRuntime({ children }: { children: React.ReactNode }) {
+function AppRuntime({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { setContextKey } = useAudio();
