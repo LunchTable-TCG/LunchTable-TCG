@@ -38,7 +38,20 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('/node_modules/')) return undefined
 
-          if (id.includes('/node_modules/@privy-io/react-auth/')) return 'vendor-privy'
+          if (id.includes('/node_modules/@walletconnect/')) return 'vendor-privy'
+          if (id.includes('/node_modules/@reown/')) return 'vendor-privy'
+          if (id.includes('/node_modules/@wagmi/')) return 'vendor-privy'
+          if (id.includes('/node_modules/viem/')) return 'vendor-privy'
+          if (id.includes('/node_modules/ox/')) return 'vendor-privy'
+          if (id.includes('/node_modules/@base-org/account/')) return 'vendor-privy'
+          if (id.includes('/node_modules/mipd/')) return 'vendor-privy'
+
+          if (id.includes('/node_modules/@privy-io/')) return 'vendor-privy'
+
+          if (id.includes('/node_modules/three/')) return 'vendor-three'
+          if (id.includes('/node_modules/@react-three/')) return 'vendor-three'
+
+          if (id.includes('/node_modules/framer-motion/')) return 'vendor-motion'
           if (id.includes('/node_modules/posthog-js/')) return 'vendor-posthog'
           if (id.includes('/node_modules/@sentry/')) return 'vendor-sentry'
           if (id.includes('/node_modules/convex/')) return 'vendor-convex'
