@@ -8,10 +8,10 @@ packages/engine/ @lunchtable-team
 convex/ @lunchtable-team
 
 # Frontend domains
-apps/web-tanstack/src/legacy/components/game/ @lunchtable-team
-apps/web-tanstack/src/legacy/components/story/ @lunchtable-team
-apps/web-tanstack/src/legacy/components/auth/ @lunchtable-team
-apps/web-tanstack/src/legacy/pages/ @lunchtable-team
+apps/web-tanstack/src/app/components/game/ @lunchtable-team
+apps/web-tanstack/src/app/components/story/ @lunchtable-team
+apps/web-tanstack/src/app/components/auth/ @lunchtable-team
+apps/web-tanstack/src/app/pages/ @lunchtable-team
 apps/web-tanstack/src/routes/ @lunchtable-team
 
 # Convex components (isolated packages)

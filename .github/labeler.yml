@@ -21,8 +21,8 @@ ui:
   - changed-files:
       - any-glob-to-any-file:
           - 'apps/web-tanstack/src/components/**'
-          - 'apps/web-tanstack/src/legacy/components/**'
-          - 'apps/web-tanstack/src/legacy/pages/**'
+          - 'apps/web-tanstack/src/app/components/**'
+          - 'apps/web-tanstack/src/app/pages/**'
           - 'apps/web-tanstack/src/routes/**'
           - 'apps/web-tanstack/src/styles/**'
           - '**/*.css'
@@ -71,14 +71,14 @@ story-mode:
   - changed-files:
       - any-glob-to-any-file:
           - 'packages/lunchtable-tcg-story/**'
-          - 'apps/web-tanstack/src/legacy/components/story/**'
+          - 'apps/web-tanstack/src/app/components/story/**'
           - 'apps/web-tanstack/src/routes/story*'
 
 pvp:
   - changed-files:
       - any-glob-to-any-file:
           - 'packages/lunchtable-tcg-match/**'
-          - 'apps/web-tanstack/src/legacy/components/game/**'
+          - 'apps/web-tanstack/src/app/components/game/**'
           - 'apps/web-tanstack/src/routes/pvp.tsx'
           - 'apps/web-tanstack/src/routes/duel.tsx'
           - 'apps/web-tanstack/src/routes/play.$matchId.tsx'
